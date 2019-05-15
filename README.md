@@ -1,6 +1,7 @@
 ## Introduction ##
 Machine learning model building is a highly iterative exploratory process where most scientists work hard to find the best model or algorithm that meets their performance requirement.
-In practice, there is no one-model-fits-all solutions, thus, there is no single model or algorithm that can handle all data set varieties and changes in data that may occur over time.  
+In practice, there is no one-model-fits-all solutions, thus, there is no single model or algorithm that can handle all data set varieties and changes in data that may occur over time. 
+ 
 Also each machine learning algorithm require user defined inputs to achieve a balance between accuracy and generalizability (which called hyperparameters). 
 So the process of selecting the Algorithm and its hyperparameters usually require a lot of trails until we find it. In case of big datasets this process will need a lot of resources (Time, Hardware, effort, …).
 
