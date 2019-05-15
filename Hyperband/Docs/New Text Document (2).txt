@@ -1,0 +1,9 @@
+SSIS SAP
+https://www.cdata.com/drivers/sap/ssis/
+
+
+SSIS to API
+http://www.kingswaysoft.com/blog/2018/02/27/How-to-Work-with-RESTful-Endpoints-in-your-SSIS-ETL-Process
+
+
+https://zappysys.com/products/ssis-powerpack/ssis-json-file-source/
