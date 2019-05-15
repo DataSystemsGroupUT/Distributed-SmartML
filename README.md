@@ -10,7 +10,7 @@ So the process of selecting the Algorithm and its hyperparameters usually requir
 
 ### The Main Idea
 The library receive dataset as an input and produce an optimized model as an output.
-The library extracts some characteristics of the datasets and use an internal knowledgebase to determine the best algorithm, then use a hyperband method to find the best hyper parameters for the selected model.
+The library extracts some characteristics of the datasets and use an internal knowledgebase to determine the best algorithm, then use a hyperband method to find the best hyper parameters for the selected algorithm.
  
 Finally, the datasets characteristics (meta-data) and its selected algorithm added as a feedback to the knowledgebase.
 ![Main Idea](https://raw.githubusercontent.com/Ahmed-Eissa/NU_AutoML/master/Main%20Idea.jpg)
