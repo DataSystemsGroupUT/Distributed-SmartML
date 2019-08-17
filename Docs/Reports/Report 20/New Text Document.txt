@@ -1,0 +1,868 @@
+import java.io.{File, PrintWriter}
+import org.apache.commons.math3.stat.descriptive.moment.Kurtosis
+import org.apache.spark.ml.feature.{StandardScaler, StandardScalerModel, StringIndexer, VectorAssembler}
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.classification.{LDA, QDA, GBTClassifier,NaiveBayes, LinearSVC, RandomForestClassifier , LogisticRegression , DecisionTreeClassifier , MultilayerPerceptronClassifier}
+
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
+import java.io.{File, PrintWriter}
+
+object myApp {
+
+  def main(args: Array[String]): Unit = {
+
+
+
+
+
+  //var dataFolderPath = "gs://sparkstorage/datasets/"
+  var dataFolderPath = "/media/eissa/New/data/" //"/home/eissa/mycode/data/"
+
+
+  val spark = SparkSession
+    .builder()
+    .appName("Java Spark SQL basic example")
+    .config("spark.master", "local")
+    .getOrCreate()
+
+    spark.sparkContext.setLogLevel("ERROR")
+      // 0- [covtype.data] --> val rawdata = loadData(spark, 0, dataFolderPath, false,true, 0)
+      // 1- [census-income.data] --> val rawdata = loadData(spark, 1, dataFolderPath, false,true, 0)
+      // 2- [kddcup.data] --> val rawdata = loadData(spark, 2, dataFolderPath, false,true, 0)
+      // 3- [poker-hand-testing.data] --> val rawdata = loadData(spark, 3, dataFolderPath, false,true, 0)
+      // 4- [credit_card_clients.csv] --> val rawdata = loadData(spark, 4, dataFolderPath, true,true, 0)
+      // 5- [Sensorless_drive_diagnosis.csv] --> val rawdata = loadData(spark, 5, dataFolderPath, true,true, 0)
+      // 6- [Statlog_Shuttle.csv] --> val rawdata = loadData(spark, 6, dataFolderPath, false,true, 0)
+      // 7- [avila.txt] --> val rawdata = loadData(spark, 7, dataFolderPath, false,true, 0)
+      // 8-
+      // 9- [Skin_NonSkin]-->  val rawdata = loadData(spark, 9, dataFolderPath, false,true, 0)
+      // 10-[dota2Train] -->  val rawdata = loadData(spark, 10, dataFolderPath, false,true, 0)
+      // 11-[MoCap_Hand_Postures] --> val rawdata = loadData(spark, 11, dataFolderPath, true,true, 0)
+      // 12- [IDA2016Challenge] -->val rawdata = loadData(spark, 12, dataFolderPath, true,true, 0)
+      // 13- [adult.csv] --> val rawdata = loadData(spark, 13, dataFolderPath, false,true, 0)
+      // 14- [bank-full.csv] --> val rawdata = loadData(spark, 14, dataFolderPath, true,true, 0)
+
+    val rawdata = loadData(spark, 15, dataFolderPath, false,false, 2)
+
+    extractDatasetMetaData("avila.txt" , rawdata , "y" , spark)
+
+    println("Nuof records = " + rawdata.count())
+  }
+
+  def loadData( spark:SparkSession, ds: Int,  Path :String, hasHeader: Boolean, PresistData: Boolean = true, Partations: Int = 0) :DataFrame =
+  {
+
+    val datasets = Array( /*0- */"covtype.data" ,
+      /*1- */"census-income.data" ,
+      /*2- */"kddcup.data" ,
+      /*3- */"poker-hand-testing.data" ,
+      /*4- */"credit_card_clients.csv" ,
+      /*5- */"Sensorless_drive_diagnosis.csv" ,
+      /*6- */"Statlog_Shuttle.csv" ,
+      /*7- */"avila.txt" ,
+      /*8- */"SUSY.csv" ,
+      /*9- */"Skin_NonSkin.txt" , //https://archive.ics.uci.edu/ml/datasets/Skin+Segmentation
+      /*10 */"dota2Train.csv" ,   //https://archive.ics.uci.edu/ml/datasets/Dota2+Games+Results
+      /*11 */"MoCap_Hand_Postures.csv" , //https://archive.ics.uci.edu/ml/datasets/MoCap+Hand+Postures
+      /*12 */"IDA2016Challenge.csv" ,  //https://archive.ics.uci.edu/ml/datasets/IDA2016Challenge
+      /*13*/ "adult.csv" ,//https://archive.ics.uci.edu/ml/datasets/Adult
+      /*14*/ "bank-full.csv" , //https://archive.ics.uci.edu/ml/datasets/Bank+Marketing
+      /*15*/ "train_5xor_128dim.csv"  //https://archive.ics.uci.edu/ml/datasets/Physical+Unclonable+Functions#
+    )
+
+    var delimiter = ","
+
+    if (ds == 9)
+      delimiter = "\t"
+    if(ds ==14)
+      delimiter = ";"
+    // Read Data
+    var rawdata = spark.read.option("header",hasHeader)
+      .option("inferSchema","true")
+      .option("delimiter", delimiter)
+      .format("csv")
+      .load(Path + datasets(ds))
+
+    //Partation it
+    if(Partations > 0 )
+      rawdata = rawdata.repartition(Partations)
+
+    //Persis it
+    if(PresistData)
+      rawdata.persist()
+
+    //Special cases
+    if(ds == 0)
+      rawdata = rawdata.withColumnRenamed("_c54" , "y")
+
+    if(ds == 1) {
+      rawdata = rawdata.withColumnRenamed("_c41", "y")
+
+      val indexer1 = new StringIndexer().setInputCol("_c1").setOutputCol("_c1_").fit(rawdata)
+      val indexer2 = new StringIndexer().setInputCol("_c4").setOutputCol("_c4_").fit(rawdata)
+      val indexer3 = new StringIndexer().setInputCol("_c6").setOutputCol("_c6_").fit(rawdata)
+      val indexer4 = new StringIndexer().setInputCol("_c7").setOutputCol("_c7_").fit(rawdata)
+      val indexer5 = new StringIndexer().setInputCol("_c8").setOutputCol("_c8_").fit(rawdata)
+      val indexer6 = new StringIndexer().setInputCol("_c9").setOutputCol("_c9_").fit(rawdata)
+      val indexer7 = new StringIndexer().setInputCol("_c10").setOutputCol("_c10_").fit(rawdata)
+      val indexer8 = new StringIndexer().setInputCol("_c11").setOutputCol("_c11_").fit(rawdata)
+      val indexer9 = new StringIndexer().setInputCol("_c12").setOutputCol("_c12_").fit(rawdata)
+      val indexer10 = new StringIndexer().setInputCol("_c13").setOutputCol("_c13_").fit(rawdata)
+      val indexer11 = new StringIndexer().setInputCol("_c14").setOutputCol("_c14_").fit(rawdata)
+      val indexer12 = new StringIndexer().setInputCol("_c15").setOutputCol("_c15_").fit(rawdata)
+      val indexer13 = new StringIndexer().setInputCol("_c19").setOutputCol("_c19_").fit(rawdata)
+      val indexer14 = new StringIndexer().setInputCol("_c20").setOutputCol("_c20_").fit(rawdata)
+      val indexer15 = new StringIndexer().setInputCol("_c21").setOutputCol("_c21_").fit(rawdata)
+      val indexer16 = new StringIndexer().setInputCol("_c22").setOutputCol("_c22_").fit(rawdata)
+      val indexer17 = new StringIndexer().setInputCol("_c23").setOutputCol("_c23_").fit(rawdata)
+      val indexer18 = new StringIndexer().setInputCol("_c25").setOutputCol("_c25_").fit(rawdata)
+      val indexer19 = new StringIndexer().setInputCol("_c26").setOutputCol("_c26_").fit(rawdata)
+      val indexer20 = new StringIndexer().setInputCol("_c27").setOutputCol("_c27_").fit(rawdata)
+      val indexer21 = new StringIndexer().setInputCol("_c28").setOutputCol("_c28_").fit(rawdata)
+      val indexer22 = new StringIndexer().setInputCol("_c29").setOutputCol("_c29_").fit(rawdata)
+      val indexer23 = new StringIndexer().setInputCol("_c31").setOutputCol("_c31_").fit(rawdata)
+      val indexer24 = new StringIndexer().setInputCol("_c32").setOutputCol("_c32_").fit(rawdata)
+      val indexer25 = new StringIndexer().setInputCol("_c33").setOutputCol("_c33_").fit(rawdata)
+      val indexer26 = new StringIndexer().setInputCol("_c34").setOutputCol("_c34_").fit(rawdata)
+      val indexer27 = new StringIndexer().setInputCol("_c35").setOutputCol("_c35_").fit(rawdata)
+      val indexer28 = new StringIndexer().setInputCol("_c37").setOutputCol("_c37_").fit(rawdata)
+
+
+      rawdata = indexer1.transform(rawdata).drop("_c1")
+      rawdata = indexer2.transform(rawdata).drop("_c4")
+      rawdata = indexer3.transform(rawdata).drop("_c6")
+      rawdata = indexer4.transform(rawdata).drop("_c7")
+      rawdata = indexer5.transform(rawdata).drop("_c8")
+      rawdata = indexer6.transform(rawdata).drop("_c9")
+      rawdata = indexer7.transform(rawdata).drop("_c10")
+      rawdata = indexer8.transform(rawdata).drop("_c11")
+      rawdata = indexer9.transform(rawdata).drop("_c12")
+      rawdata = indexer10.transform(rawdata).drop("_c13")
+      rawdata = indexer11.transform(rawdata).drop("_c14")
+      rawdata = indexer12.transform(rawdata).drop("_c15")
+      rawdata = indexer13.transform(rawdata).drop("_c19")
+      rawdata = indexer14.transform(rawdata).drop("_c20")
+      rawdata = indexer15.transform(rawdata).drop("_c21")
+      rawdata = indexer16.transform(rawdata).drop("_c22")
+      rawdata = indexer17.transform(rawdata).drop("_c23")
+      rawdata = indexer18.transform(rawdata).drop("_c25")
+      rawdata = indexer19.transform(rawdata).drop("_c26")
+      rawdata = indexer20.transform(rawdata).drop("_c27")
+      rawdata = indexer21.transform(rawdata).drop("_c28")
+      rawdata = indexer22.transform(rawdata).drop("_c29")
+      rawdata = indexer23.transform(rawdata).drop("_c31")
+      rawdata = indexer24.transform(rawdata).drop("_c32")
+      rawdata = indexer25.transform(rawdata).drop("_c33")
+      rawdata = indexer26.transform(rawdata).drop("_c34")
+      rawdata = indexer27.transform(rawdata).drop("_c35")
+      rawdata = indexer28.transform(rawdata) .drop("_c37")
+
+      import org.apache.spark.sql.functions._
+      rawdata = rawdata.withColumn("y", when(col("y") === " - 50000.", 0).otherwise("1").cast(org.apache.spark.sql.types.DataTypes.FloatType));
+
+    }
+
+    if(ds == 2) {
+
+      val indexer1 = new StringIndexer().setInputCol("_c1").setOutputCol("_c1_").fit(rawdata)
+      val indexer2 = new StringIndexer().setInputCol("_c2").setOutputCol("_c2_").fit(rawdata)
+      val indexer3 = new StringIndexer().setInputCol("_c3").setOutputCol("_c3_").fit(rawdata)
+      val indexer4 = new StringIndexer().setInputCol("_c41").setOutputCol("y").fit(rawdata)
+
+      rawdata = indexer1.transform(rawdata).drop("_c1")
+      rawdata = indexer2.transform(rawdata).drop("_c2")
+      rawdata = indexer3.transform(rawdata).drop("_c3")
+      rawdata = indexer4.transform(rawdata).drop("_c41")
+
+    }
+
+    if(ds == 3) {
+
+      rawdata = rawdata.withColumnRenamed("_c10", "y")
+    }
+
+    if(ds == 6) {
+      rawdata = rawdata.withColumnRenamed("_c9" , "y")
+
+    }
+
+    if(ds == 7) {
+      rawdata = rawdata.withColumnRenamed("_c10" , "y")
+
+    }
+
+    if(ds == 9) {
+
+      rawdata = rawdata.withColumn("y" ,  when(col("_c3").equalTo(2), 1).otherwise( lit(0)) )
+      rawdata = rawdata.drop("_c3")
+      //rawdata = rawdata.withColumnRenamed("_c3", "y")
+
+    }
+
+    if(ds == 10) {
+
+      rawdata = rawdata.withColumn("y" ,  when(col("_c0").equalTo(-1), 0).otherwise( lit(1)) )
+      rawdata = rawdata.drop("_c0")
+      //rawdata = rawdata.withColumnRenamed("_c3", "y")
+
+    }
+
+    if(ds == 11) {
+
+      rawdata = rawdata.withColumn("y" , ( col("Class") - 1).cast(IntegerType))
+
+      rawdata = rawdata.drop("Class")
+
+      rawdata.schema.filter(c => c.name != "y").foreach(scol => {
+
+               if(! scol.dataType.isInstanceOf[NumericType])
+               {
+                 rawdata = rawdata.withColumn(scol.name + "_1" ,  when(col(scol.name).equalTo("?"), null).otherwise( scol.name).cast(IntegerType) )
+                 rawdata = rawdata.drop(scol.name)
+               }
+        })
+      //rawdata = rawdata.withColumnRenamed("_c3", "y"var del
+
+      rawdata = rawdata.randomSplit(Array(0.1, 0.9))(0)
+    }
+
+    if(ds == 12) {
+        rawdata = rawdata.withColumnRenamed("class", "y").randomSplit(Array(0.1, 0.9))(0)
+
+      }
+
+    if(ds == 13) {
+        rawdata = rawdata.withColumn( "y" ,  when(col("_c14" ).equalTo(" <=50K"), 0).otherwise( lit(1)).cast(IntegerType) )
+        rawdata = rawdata.drop("_c14")
+
+
+        rawdata.schema.filter(c => c.name != "y").foreach(scol => {
+
+          //if(! scol.dataType.isInstanceOf[NumericType])
+          //{
+          rawdata = rawdata.withColumn(scol.name + "_1" ,  when(col(scol.name).equalTo("?"), null).otherwise( col(scol.name) ))
+          rawdata = rawdata.drop(scol.name)
+          //}
+        })
+
+
+        val indexer1 = new StringIndexer().setInputCol("_c1_1").setOutputCol("c1")
+        rawdata = indexer1.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("_c1_1")
+
+        val indexer3 = new StringIndexer().setInputCol("_c3_1").setOutputCol("c3")
+        rawdata = indexer3.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("_c3_1")
+
+        val indexer5 = new StringIndexer().setInputCol("_c5_1").setOutputCol("c5")
+        rawdata = indexer5.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("_c5_1")
+
+
+        val indexer6 = new StringIndexer().setInputCol("_c6_1").setOutputCol("c6")
+        rawdata = indexer6.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("_c6_1")
+
+        val indexer7 = new StringIndexer().setInputCol("_c7_1").setOutputCol("c7")
+        rawdata = indexer7.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("_c7_1")
+
+
+        val indexer8 = new StringIndexer().setInputCol("_c8_1").setOutputCol("c8")
+        rawdata = indexer8.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("_c8_1")
+
+        val indexer9 = new StringIndexer().setInputCol("_c9_1").setOutputCol("c9")
+        rawdata = indexer9.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("_c9_1")
+
+        val indexer13 = new StringIndexer().setInputCol("_c13_1").setOutputCol("c13")
+        rawdata = indexer13.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("_c13_1")
+
+      }
+
+    if(ds == 14) {
+        rawdata = rawdata.withColumn( "y_1" ,  when(col("y" ).equalTo("yes"), 1).otherwise( lit(0)).cast(IntegerType) )
+        rawdata = rawdata.drop("y")
+        rawdata = rawdata.withColumnRenamed( "y_1" ,"y")
+
+
+        rawdata.schema.filter(c => c.name != "y").foreach(scol => {
+
+          //if(! scol.dataType.isInstanceOf[NumericType])
+          //{
+          rawdata = rawdata.withColumn(scol.name + "_1" ,  when(col(scol.name).equalTo("none"), null).otherwise( col(scol.name) ))
+          rawdata = rawdata.drop(scol.name)
+          //}
+        })
+
+
+        val indexer1 = new StringIndexer().setInputCol("job_1").setOutputCol("job")
+        rawdata = indexer1.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("job_1")
+
+        val indexer3 = new StringIndexer().setInputCol("marital_1").setOutputCol("marital")
+        rawdata = indexer3.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("marital_1")
+
+        val indexer5 = new StringIndexer().setInputCol("education_1").setOutputCol("education")
+        rawdata = indexer5.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("education_1")
+
+
+        val indexer6 = new StringIndexer().setInputCol("default_1").setOutputCol("default")
+        rawdata = indexer6.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("default_1")
+
+        val indexer7 = new StringIndexer().setInputCol("housing_1").setOutputCol("housing")
+        rawdata = indexer7.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("housing_1")
+
+
+        val indexer8 = new StringIndexer().setInputCol("loan_1").setOutputCol("loan")
+        rawdata = indexer8.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("loan_1")
+
+        val indexer9 = new StringIndexer().setInputCol("contact_1").setOutputCol("contact")
+        rawdata = indexer9.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("contact_1")
+
+        val indexer13 = new StringIndexer().setInputCol("month_1").setOutputCol("month")
+        rawdata = indexer13.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("month_1")
+
+        val indexer14 = new StringIndexer().setInputCol("poutcome_1").setOutputCol("poutcome")
+        rawdata = indexer14.fit(rawdata).transform(rawdata)
+        rawdata = rawdata.drop("poutcome_1")
+
+      }
+
+    if(ds == 15)
+      {
+        rawdata = rawdata.randomSplit(Array(0.001 , 0.999))(0)
+        rawdata = rawdata.withColumn( "y" ,  when(col("_c128" ).equalTo(-1), 0).otherwise( lit(1)).cast(IntegerType) )
+        rawdata = rawdata.drop("_c128")
+      }
+
+    //return it
+    rawdata
+
+  }
+
+  def extractDatasetMetaData( datasetname:String , df_passed:DataFrame , TargetCol:String , spark:SparkSession): Unit = {
+
+    var dataFolderPath = "/media/eissa/New/data/" ///home/eissa_abdelrahman5" //gs://sparkstorage/"
+    val pwLog2 = new PrintWriter(new File(dataFolderPath + "/log.txt"))
+    // # Drop raw if all of its values are missing
+    var df = df_passed.na.drop(1)
+
+    df.createOrReplaceTempView("mydf")
+
+
+
+    //columns with always the same value
+    /*
+        df.schema.foreach(col => {
+          if ( col.name != TargetCol )
+            {
+              if (df.agg( countDistinct(col.name)).count  < 2)
+                    df = df.drop(col.name)
+            }
+        })
+        */
+
+    // has column(s) with -ve values
+    var hasNegativeFeatures = false
+    //1- number of instances
+    val nr_instances = df.count()
+
+    //2- log of umber of instances
+    val log_nr_instances = math.log(nr_instances)
+
+    //3- Number of Features
+    val nr_features = df.columns.length
+
+    //4- log number of Features
+    val log_nr_features = math.log(nr_features)
+
+    //5- Number of Missing Values
+    val cond = df.columns.map(x => col(x).isNull || col(x) === "").reduce(_ || _)
+    val missing_val = df.filter(cond).count()
+
+    //6- Ratio of missing value
+    val ratio_missing_val = missing_val.toDouble / df.count().toDouble
+
+
+    //7 - Number of Numerical Features
+    // here i will remove coulmn with constant value
+    // will remove column with non numeric data type
+    // accepted type are : ByteType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType
+    import scala.collection.mutable.ListBuffer
+    var numerical = new ListBuffer[String]()
+    var categorical = new ListBuffer[String]()
+    var ColumnsTypes = Map[String, org.apache.spark.sql.types.DataType]()
+
+    df.schema.filter(c => c.name != TargetCol).foreach(col => {
+
+      ColumnsTypes += (col.name -> col.dataType)
+
+      if
+      (
+        col.dataType.isInstanceOf[NumericType] /*
+        col.dataType.isInstanceOf[ByteType]  ||
+        col.dataType.isInstanceOf[DecimalType]  ||
+        col.dataType.isInstanceOf[DoubleType]  ||
+        col.dataType.isInstanceOf[FloatType]  ||
+        col.dataType.isInstanceOf[IntegerType]  ||
+        col.dataType.isInstanceOf[LongType]  ||
+        col.dataType.isInstanceOf[ShortType]     */
+
+      ) {
+        val numSyms = df.select(col.name).distinct().count()
+
+        if (numSyms < 2)
+          df = df.drop(col.name)
+        else if (numSyms < log_nr_instances)
+          categorical += col.name
+        else
+          numerical += col.name
+        //it should be considered as categorical if number of unique values < log number of instances
+      }
+      else
+        throw new Exception("Error non numeric column not allowed: Column =  " + col.name + " , of type: " + col.dataType)
+
+    })
+    val nr_numerical_features = numerical.length
+    val nr_categorical_features = categorical.length
+
+
+    //10  Ratio of Categorical to Numerical Features - DONE
+    var ratio_num_cat = 999999999.0
+
+    if (nr_numerical_features > 0)
+      ratio_num_cat = nr_categorical_features.toDouble / nr_numerical_features.toDouble
+
+    //11- Class Entropy - DONE
+    var prob_classes = new ListBuffer[Double]()
+    var class_entropy = 0.0
+    import spark.implicits._
+    //var classes = df.select(TargetCol).distinct().map( r => r.getAs[Integer](0)).collect()
+    //var classes_prob_Map = df.groupBy(TargetCol).count().map(r => (r.getInt(0), r.getLong(1))).collect()
+    var classes_prob_List = df.groupBy(TargetCol).count().collect().toList
+
+    for (x <- classes_prob_List) {
+      var prob = (x(1).asInstanceOf[Long].toDouble / nr_instances)
+
+      prob_classes += prob
+      class_entropy = class_entropy - prob * math.log(prob)
+    }
+    val nr_classes = prob_classes.length
+
+
+    //12 - Maximum Class probability - DONE
+    val max_prob = prob_classes.max
+
+    //13- Minimum Class probability - DONE
+    val min_prob = prob_classes.min
+
+    //14-  Mean Class probability - DONE
+    val mean_prob = prob_classes.sum / prob_classes.length
+
+    //15 -  Standard Deviation of Class probability - DONE
+    var std_dev = 0.0
+    for (x <- classes_prob_List) {
+      var prob = (x(1).asInstanceOf[Long].toDouble / nr_instances)
+      std_dev = std_dev + ((prob - mean_prob) * (prob - mean_prob))
+    }
+    std_dev = std_dev / (prob_classes.length - 1)
+    std_dev = math.pow(std_dev, 0.5)
+
+    // 16 -  Dataset Ratio - DONE
+    val dataset_ratio = nr_features.toDouble / nr_instances.toDouble
+
+
+    // =====> Categorical Features Statistics
+    // ===================================================================================================
+    // ByteType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType
+    var symbols = new ListBuffer[Double]()
+    var symbols_sum = 0.0
+    var symbols_mean = 0.0
+    var symbols_std_dev = 0.0
+
+
+    for (c <- categorical) {
+      val ColumnType = ColumnsTypes(c)
+      df.select(c).distinct().filter(r => r.getAs[Number](0) != null).map( r => r.getAs[Number](0).doubleValue()).collect().foreach( i => symbols.append(i))
+
+      /*var e = spark.sql("SELECT distinct "+ c +" FROM mydf").collect.toList
+      e.foreach( s =>
+        {
+          if( s != null)
+            symbols.append(s(0).asInstanceOf[Number].doubleValue())
+        }
+      )*/
+      //var l = df.select(c).distinct()
+      //var l1 = l.map(r => r.get(0).asInstanceOf[Number].doubleValue())
+      //var l2 = l1.collect()
+
+      //symbols = ListBuffer.concat(symbols, e)
+      //pwLog2.write("Column:" + c + ", Distinct Value = " + e.length + "\n")
+
+      /*
+      ColumnType.toString match {
+        case "ByteType" => symbols = ListBuffer.concat(symbols, df.select(c).distinct().map(r => r.get(0).asInstanceOf[Byte].toDouble).collect())
+        //case "DecimalType" => categorical_col_symbol = df.select(c).distinct().map( r => r.get(0).asInstanceOf[DecimalType].toDouble).collect()
+        case "FloatType" => symbols = ListBuffer.concat(symbols, df.select(c).distinct().map(r => r.get(0).asInstanceOf[Float].toDouble).collect())
+        case "IntegerType" => symbols = ListBuffer.concat(symbols, df.select(c).distinct().map(r => r.get(0).asInstanceOf[Number].doubleValue()).collect())
+        case "LongType" => symbols = ListBuffer.concat(symbols, df.select(c).distinct().map(r => r.get(0).asInstanceOf[Long].toDouble).collect())
+        case "ShortType" => symbols = ListBuffer.concat(symbols, df.select(c).distinct().map(r => r.get(0).asInstanceOf[Short].toDouble).collect())
+        case "DoubleType" => symbols = ListBuffer.concat(symbols, df.select(c).distinct().map(r => r.get(0).asInstanceOf[Number].doubleValue()).collect())
+      }
+      */
+    }
+
+    if (categorical.length > 0) {
+
+      if (symbols.filter(d => d < 0).length > 0)
+        hasNegativeFeatures = true
+
+      //17- Symbols Sum - DONE
+      symbols_sum = symbols.sum
+
+      //18- Symbols Mean - DONE
+      symbols_mean = symbols.sum / symbols.length
+
+      //19- Symbols Standard Deviation - DONE
+      symbols_std_dev = math.pow(symbols.map(i => math.pow((i - symbols_mean), 2)).sum / symbols.length, 0.5)
+    }
+
+
+    // Numerical Features Statistics
+    //===========================================================================
+    var skewness_values = new Array[Double](numerical.length)
+    var kurtosis_values = new Array[Double](numerical.length)
+    var counter = 0
+
+
+    for (c <- numerical) {
+      var exp = Map(c -> "sum", c -> "count")
+
+      val ColumnType = ColumnsTypes(c)
+      val dftmp = df.select(c).filter(df.col(c).isNotNull)
+
+      val res = dftmp.agg((c, "mean"), (c, "std"), (c, "count"), (c, "min")).collect.toList(0)
+      val colmean = res(0).asInstanceOf[Double]
+      val colstd = res(1).asInstanceOf[Double]
+      val n = res(2).asInstanceOf[Number].doubleValue()
+      val smallestValue = res(3).asInstanceOf[Number].doubleValue()
+      pwLog2.write("Column:" + c + ", Distinct Value = " + n + "\n")
+
+      val t1 = ((n * (n + 1)) / ((n - 1) * (n - 2) * (n - 3)))
+      val t3 = ((3 * Math.pow((n - 1), 2)) / ((n - 2) * (n - 3)))
+      val t4 = (n / (n - 1) * (n - 2))
+
+      var t2 = 0.0
+      var t5 = 0.0
+      var tmp = dftmp
+        .withColumn(c + "z1", (col(c) - colmean) * (col(c) - colmean) * (col(c) - colmean) * (col(c) - colmean))
+        .withColumn(c + "z2", (col(c) - colmean) * (col(c) - colmean) * (col(c) - colmean))
+        .agg((c + "z1", "sum"), (c + "z2", "sum")).collect.toList(0)
+
+      t2 = tmp(0).asInstanceOf[Double]
+      t5 = tmp(1).asInstanceOf[Double]
+
+
+      //dftmp.withColumn(C+"z"  , math.pow(col(c) - colmean , 4)).agg((c+"z", "sum")).collect
+      //t2 =  dftmp.withColumn(c + "z"  , (col(c) - colmean) *  (col(c) - colmean) * (col(c) - colmean) * (col(c) - colmean)).agg((c+"z", "sum")).collect.toList(0)(0).asInstanceOf[Double]
+      //dftmp.map(r => Math.pow(r.get(0).asInstanceOf[Integer].toDouble , 4)).agg(("x3", "sum")).collect.toList(0)(0).asInstanceOf[Double]
+      /*
+      ColumnType.toString match {
+        case "ByteType" => t2 = df.select(c).filter(df.col(c).isNotNull).map(r => Math.pow(r.get(0).asInstanceOf[Byte].toDouble - colmean, 4)).agg((c, "mean")).collect.toList(0)(0).asInstanceOf[Double]
+        //case "DecimalType" => categorical_col_symbol = df.select(c).distinct().map( r => r.get(0).asInstanceOf[DecimalType].toDouble).collect()
+        case "FloatType" => t2 = df.select(c).filter(df.col(c).isNotNull).map(r => Math.pow(r.get(0).asInstanceOf[Number].doubleValue() - colmean, 4)).agg((c, "mean")).collect.toList(0)(0).asInstanceOf[Double]
+        case "IntegerType" => t2 = df.select(c).filter(df.col(c).isNotNull).map(r => Math.pow(r.get(0).asInstanceOf[Integer].toDouble - colmean, 4)).agg((c, "mean")).collect.toList(0)(0).asInstanceOf[Double]
+        case "LongType" => t2 = df.select(c).filter(df.col(c).isNotNull).map(r => Math.pow(r.get(0).asInstanceOf[Long].toDouble - colmean, 4)).agg((c, "mean")).collect.toList(0)(0).asInstanceOf[Double]
+        case "ShortType" => t2 = df.select(c).filter(df.col(c).isNotNull).map(r => Math.pow(r.get(0).asInstanceOf[Short].toDouble - colmean, 4)).agg((c, "mean")).collect.toList(0)(0).asInstanceOf[Double]
+        case "DoubleType" => t2 = df.select(c).filter(df.col(c).isNotNull).map(r => Math.pow(r.get(0).asInstanceOf[Double] - colmean, 4)).agg((c, "mean")).collect.toList(0)(0).asInstanceOf[Double]
+      }
+
+         */
+      var kurt = (t1 * (t2 / math.pow(colstd, 4))) - t3
+      var skew = (t4 * t5) / math.pow(colstd, 3)
+      kurtosis_values(counter) = kurt
+      skewness_values(counter) = skew
+      counter = counter + 1
+
+
+      if (smallestValue < 0)
+        hasNegativeFeatures = true
+      //kurtosis = { [n(n+1) / (n -1)(n - 2)(n-3)] sum[(x_i - mean)^4] / std^4 } - [3(n-1)^2 / (n-2)(n-3)]
+      // https://stats.idre.ucla.edu/other/mult-pkg/faq/general/faq-whats-with-the-different-formulas-for-kurtosis/
+
+      //skewness = [n / (n -1) (n - 2)] sum[(x_i - mean)^3] / std^3
+    }
+    var skew_min = 0.0
+    var skew_max = 0.0
+    var skew_mean = 0.0
+    var skew_std_dev = 0.0
+    var kurtosis_min = 0.0
+    var kurtosis_max = 0.0
+    var kurtosis_mean = 0.0
+    var kurtosis_std_dev = 0.0
+    if (numerical.length > 0) {
+      //20. Skewness Minimum - DONE
+      skew_min = skewness_values.min
+
+      //21. Skewness Maximum - DONE
+      skew_max = skewness_values.max
+
+      //22. Skewness Mean - DONE
+      skew_mean = skewness_values.sum / skewness_values.length
+
+      // 23. Skewness Standard deviation - DONE
+      skew_std_dev = math.pow(skewness_values.map(i => math.pow((i - skew_mean), 2)).sum / skewness_values.length, 0.5)
+
+      //24. Kurtosis Minimum - DONE
+      kurtosis_min = kurtosis_values.min
+
+      //25. Kurtosis Maximum - DONE
+      kurtosis_max = kurtosis_values.max
+
+      // 26. Kurtosis Mean - DONE
+      kurtosis_mean = kurtosis_values.sum / kurtosis_values.length
+
+      // 27. Kurtosis Standard Deviation - DONE
+      kurtosis_std_dev = math.pow(kurtosis_values.map(i => math.pow((i - kurtosis_mean), 2)).sum / kurtosis_values.length, 0.5)
+
+    }
+    var label = "y"
+    var featurecolumns = df.columns.filter(c => c != label)
+
+    if(missing_val > 0 )
+      {
+    df = df.select(df.columns.map(c => col(c).cast(DoubleType)) : _*)
+    // handle null
+    val imputer = new org.apache.spark.ml.feature.Imputer()
+      .setInputCols(featurecolumns)
+      .setOutputCols(featurecolumns.map(c => s"${c}_imputed"))
+      .setStrategy("median")
+
+    df = imputer.fit(df).transform(df)
+    df = df.select(df.columns.filter(colName => !featurecolumns.contains(colName)).map(colName => col(colName)): _*)
+      }
+    featurecolumns = df.columns.filter(c => c != label)
+    val assembler = new VectorAssembler()
+      .setInputCols(featurecolumns)
+      .setOutputCol("features")
+
+    val mydataset = assembler.transform(df).select(label, "features")
+
+    val Array(trainingData, testData) = mydataset.randomSplit(Array(0.8, 0.2))
+
+
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setLabelCol(label)
+      .setPredictionCol("prediction")
+      .setMetricName("accuracy")
+
+    var accuracyMap = Map[String, Double]()
+    // 1- RandomForest   =================================
+    val rf = new RandomForestClassifier()
+      .setLabelCol(label)
+      .setFeaturesCol("features")
+      .setMaxBins(100)
+    val model_rf = rf.fit(trainingData)
+    val predictions_rf = model_rf.transform(testData)
+    val accuracy_rf = evaluator.evaluate(predictions_rf)
+    accuracyMap += ("RandomForestClassifier" -> accuracy_rf)
+
+    // 2- Logistic Regression   =================================
+    val lr = new LogisticRegression()
+      .setMaxIter(10)
+      .setRegParam(0.3)
+      .setElasticNetParam(0.8)
+      .setLabelCol(label)
+      .setFeaturesCol("features")
+    val model_lr = lr.fit(trainingData)
+    val predictions_lr = model_lr.transform(testData)
+    val accuracy_lr = evaluator.evaluate(predictions_lr)
+    accuracyMap += ("LogisticRegression" -> accuracy_lr)
+
+
+    // 3- Decision Tree
+    val dt = new DecisionTreeClassifier()
+      .setLabelCol(label)
+      .setFeaturesCol("features")
+      .setMaxBins(100)
+
+
+    val model_dt = dt.fit(trainingData)
+    val predictions_dt = model_dt.transform(testData)
+    val accuracy_dt = evaluator.evaluate(predictions_dt)
+    accuracyMap += ("DecisionTreeClassifier" -> accuracy_dt)
+
+    // 4- Multilayer Perceptron
+    val layers = Array[Int](featurecolumns.length, 3, nr_classes)
+    val mpr = new MultilayerPerceptronClassifier()
+      .setLayers(layers)
+      .setBlockSize(128)
+      .setSeed(1234L)
+      .setMaxIter(100)
+      .setLabelCol(label)
+      .setFeaturesCol("features")
+    try
+    {
+      val model_mpr = mpr.fit(trainingData)
+      val predictions_mpr = model_mpr.transform(testData)
+      val accuracy_mpr = evaluator.evaluate(predictions_mpr)
+      accuracyMap += ("MultilayerPerceptronClassifier" -> accuracy_mpr)
+    } catch
+      {
+        case e: Exception => accuracyMap += ("MultilayerPerceptronClassifier" -> 0)
+      }
+
+       // 5- Linear SVC
+      if (nr_classes == 2) {
+        val lsvc = new LinearSVC()
+          .setMaxIter(10)
+          .setRegParam(0.1)
+          .setLabelCol(label)
+          .setFeaturesCol("features")
+        val model_lsvc = lsvc.fit(trainingData)
+        val predictions_lsvc = model_lsvc.transform(testData)
+        val accuracy_lsvc = evaluator.evaluate(predictions_lsvc)
+        accuracyMap += ("LinearSVC" -> accuracy_lsvc)
+      }
+    else
+         accuracyMap += ("LinearSVC" -> 0.0)
+
+
+      // 6- NaiveBayes
+        if(hasNegativeFeatures == false)
+        {
+          val nb = new NaiveBayes()
+            .setLabelCol(label)
+            .setFeaturesCol("features")
+          val model_nb = nb.fit(trainingData)
+          val predictions_nb = model_nb.transform(testData)
+          val accuracy_nb = evaluator.evaluate(predictions_nb)
+          accuracyMap += ("NaiveBayes" -> accuracy_nb)
+        }
+        else
+          accuracyMap += ("NaiveBayes" -> 0.0)
+
+
+     // 7- GBT
+    if (nr_classes == 2) {
+     val gbt = new GBTClassifier()
+       .setLabelCol(label)
+       .setFeaturesCol("features")
+       .setMaxIter(10)
+       .setFeatureSubsetStrategy("auto")
+       .setMaxBins(100)
+    val model_gbt = gbt.fit(trainingData)
+    val predictions_gbt = model_gbt.transform(testData)
+    val accuracy_gbt = evaluator.evaluate(predictions_gbt)
+    accuracyMap += ("GBTClassifier" -> accuracy_gbt)
+    }
+    else
+      accuracyMap += ("GBTClassifier" -> 0.0)
+
+    // 8- LDA
+    val lda = new org.apache.spark.ml.classification.LDA( spark.sparkContext)
+    lda.setLabelCol(label)
+    lda.setFeaturesCol("features")
+    lda.setScaledData(false)
+    lda.setPredictionCol("prediction")
+    lda.setProbabilityCol("Probability")
+    lda.setRawPredictionCol("RawPrediction")
+    val model_lda = lda.fit(trainingData)
+    val predictions_lda = model_lda.transform(testData)
+    val accuracy_lda = evaluator.evaluate(predictions_lda)
+    accuracyMap += ("LDA" -> accuracy_lda)
+
+
+    // 9- QDA
+    val qda = new org.apache.spark.ml.classification.QDA( spark.sparkContext)
+    qda.setLabelCol(label)
+    qda.setFeaturesCol("features")
+    qda.setScaledData(false)
+    qda.setPredictionCol("prediction")
+    qda.setProbabilityCol("Probability")
+    qda.setRawPredictionCol("RawPrediction")
+    val model_qda = qda.fit(trainingData)
+    val predictions_qda = model_qda.transform(testData)
+    val accuracy_qda = evaluator.evaluate(predictions_qda)
+    accuracyMap += ("QDA" -> accuracy_qda)
+
+
+
+    println("=================================================================")
+    println("nr_instances:" + nr_instances)
+    println("log_nr_instances:" + log_nr_instances)
+    println("nr_features:" + nr_features)
+    println("log_nr_features:" + log_nr_features)
+    println("nr_classes:" + nr_classes)
+    println("nr_numerical_features:" + nr_numerical_features)
+    println("nr_categorical_features:" + nr_categorical_features)
+    println("ratio_num_cat:" + ratio_num_cat)
+    println("class_entropy:" + class_entropy)
+    println("missing_val:" + missing_val)
+    println("ratio_missing_val:" + ratio_missing_val)
+    println("max_prob:" + max_prob)
+    println("min_prob:" + min_prob)
+    println("mean_prob:" + mean_prob)
+    println("std_dev:" + std_dev)
+    println("dataset_ratio:" + dataset_ratio)
+    println("symbols_sum:" + symbols_sum)
+    println("symbols_mean:" + symbols_mean)
+    println("symbols_std_dev:" + symbols_std_dev)
+    println("skew_min:" + skew_min)
+    println("skew_max:" + skew_max)
+    println("skew_mean:" + skew_mean)
+    println("skew_std_dev:" + skew_std_dev)
+    println("kurtosis_min:" + kurtosis_min)
+    println("kurtosis_max:" + kurtosis_max)
+    println("kurtosis_mean:" + kurtosis_mean)
+    println("kurtosis_std_dev:" + kurtosis_std_dev)
+
+    println("RandomForestClassifier:" + accuracyMap("RandomForestClassifier"))
+    println("LogisticRegression:" + accuracyMap("LogisticRegression"))
+    println("DecisionTreeClassifier:" + accuracyMap("DecisionTreeClassifier"))
+    println("MultilayerPerceptronClassifier:" + accuracyMap("MultilayerPerceptronClassifier"))
+    println("LinearSVC:" + accuracyMap("LinearSVC"))
+    println("NaiveBayes:" + accuracyMap("NaiveBayes"))
+    println("GBTClassifier:" + accuracyMap("GBTClassifier"))
+    println("LDA:" + accuracyMap("LDA"))
+    println("QDA:" + accuracyMap("QDA"))
+    println("Best Algorithm: " + accuracyMap.maxBy(_._2)._1 +", Accuracy = " + accuracyMap.maxBy(_._2)._2)
+
+
+
+    //var dataFolderPath = "gs://sparkstorage/"
+    val pwLog1 = new PrintWriter(new File(dataFolderPath + "/result.txt"))
+
+    pwLog1.write("dataset,nr_instances,log_nr_instances,nr_features,log_nr_features,nr_classes,nr_numerical_features,nr_categorical_features," +
+      "ratio_num_cat,class_entropy,missing_val,ratio_missing_val,max_prob,min_prob,mean_prob,std_dev," +
+      "dataset_ratio,symbols_sum,symbols_mean,symbols_std_dev,skew_min,skew_max,skew_mean,skew_std_dev," +
+      "kurtosis_min,kurtosis_max,kurtosis_mean,kurtosis_std_dev,RandomForestClassifier,LogisticRegression,DecisionTreeClassifier," +
+      "MultilayerPerceptronClassifier,LinearSVC,NaiveBayes,GBTClassifier,LDA,QDA,Best Algorithm\n")
+
+    pwLog1.write(datasetname + "," + nr_instances + "," + log_nr_instances + "," + nr_features + "," + log_nr_features + "," + nr_classes + "," + nr_numerical_features + "," + nr_categorical_features + "," +
+      ratio_num_cat + "," + class_entropy + "," + missing_val + "," + ratio_missing_val + "," + max_prob + "," + min_prob + "," + mean_prob + "," + std_dev + "," +
+      dataset_ratio + "," + symbols_sum + "," + symbols_mean + "," + symbols_std_dev+ "," + skew_min+ "," + skew_max+ "," + skew_mean+ "," + skew_std_dev + "," +
+      kurtosis_min+ "," +kurtosis_max+ "," +kurtosis_mean+ "," +kurtosis_std_dev+ "," +  accuracyMap("RandomForestClassifier") + "," +  accuracyMap("LogisticRegression") + "," +
+      accuracyMap("DecisionTreeClassifier") + "," + accuracyMap("MultilayerPerceptronClassifier") + "," + accuracyMap("LinearSVC") + "," + accuracyMap("NaiveBayes") + "," +  accuracyMap("GBTClassifier")+ "," +  accuracyMap("LDA")+ "," +  accuracyMap("QDA") + "," +accuracyMap.maxBy(_._2)._1+"\n" )
+     pwLog1.close()
+  }
+
+
+}
