@@ -1,0 +1,11 @@
+- Percision & Recall
+	URL:https://www.youtube.com/watch?v=j-EB6RqqjGI
+
+- PMML Scala Example
+	URL:https://www.programcreek.com/scala/org.dmg.pmml.PMML
+
+- JPMML-Evaluator-Spark
+	URL:https://github.com/jpmml/jpmml-evaluator
+	   :https://mvnrepository.com/artifact/org.jpmml/pmml-evaluator/1.4.9
+	   :https://mvnrepository.com/artifact/org.jpmml/pmml-evaluator-extension/1.4.9
+

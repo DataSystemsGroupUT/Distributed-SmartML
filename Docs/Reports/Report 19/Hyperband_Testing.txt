@@ -1,0 +1,302 @@
+
+import java.io.{File, PrintWriter}
+
+import org.apache.spark.ml.feature.{StandardScaler, StandardScalerModel, StringIndexer, VectorAssembler}
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.ml.tuning.{Hyperband, ParamGridBuilder, TrainValidationSplit}
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+import org.apache.spark.ml.regression.LinearRegression
+import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
+
+object Hyperband_Testing {
+
+
+  def main(args: Array[String]): Unit = {
+
+    var dataFolderPath = "/home/eissa/mycode/data/"
+
+    //Create Spark Session
+    //==================================================================================================================
+    val spark = SparkSession
+      .builder()
+      .appName("Java Spark SQL basic example")
+      .config("spark.master", "local")
+      .getOrCreate();
+
+    // Prepare training and test data.
+    //==================================================================================================================
+
+
+
+
+    // Datasets
+    // 0- [covtype.data] --> val rawdata = loadData(spark, 0, dataFolderPath, false,true, 0)
+    // 1- [census-income.data] --> val rawdata = loadData(spark, 1, dataFolderPath, false,true, 0)
+    // 2- [kddcup.data] --> val rawdata = loadData(spark, 2, dataFolderPath, false,true, 0)
+    // 3- [poker-hand-testing.data] --> val rawdata = loadData(spark, 3, dataFolderPath, false,true, 0)
+    // 4- [credit_card_clients.csv] --> val rawdata = loadData(spark, 4, dataFolderPath, true,true, 0)
+    // 5- [Sensorless_drive_diagnosis.csv] --> val rawdata = loadData(spark, 5, dataFolderPath, true,true, 0)
+    // 6- [Statlog_Shuttle.csv] --> val rawdata = loadData(spark, 6, dataFolderPath, false,true, 0)
+    // 7- [avila.txt] --> val rawdata = loadData(spark, 7, dataFolderPath, false,true, 0)
+
+    val rawdata = loadData(spark, 7, dataFolderPath, false,true, 0)
+
+    var label = "y"
+
+    val featurecolumns = rawdata.columns.filter(c => c != label)
+
+    val assembler = new VectorAssembler()
+      .setInputCols(featurecolumns)
+      .setOutputCol("features")
+
+
+
+    val mydataset = assembler.transform(rawdata.na.drop).select(label, "features")
+    //val scalermodel = scaler.fit(Alldata)
+    //var mydataset = scalermodel.transform(Alldata)
+    val Array(trainingData, testData) = mydataset.randomSplit(Array(0.7, 0.3))
+
+
+    // Create Estimator, Evaluator and Hyper parameters Grid
+    //==================================================================================================================
+
+    // 1- Estimator
+    val rf = new RandomForestClassifier()
+      .setLabelCol(label)
+      .setFeaturesCol("features")
+
+    val lr = new LinearRegression()
+
+
+    // 2- Grid of Hyper- Parameters
+    var paramGrid = new ParamGridBuilder()
+      .addGrid(rf.numTrees, Array(2, 5, 7, 10, 15, 20))
+      .addGrid(rf.maxDepth ,Array(2, 5, 7, 10, 15, 20) )
+      .addGrid(rf.maxBins, Array(10, 50, 100, 200, 500, 1000 ))
+      .addGrid(rf.impurity, Array("gini", "entropy"))//, 50, 100, 200, 500, 1000 ))
+      .build()
+    val r = scala.util.Random
+    paramGrid = r.shuffle(paramGrid.toList).toArray
+
+    // 3- Evaluator
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setLabelCol(label)
+      .setPredictionCol("prediction")
+      .setMetricName("accuracy")
+
+    // Create Hyperband & Train Validation Split objects
+    //==================================================================================================================
+
+    // 1- Hyperband
+    val hb = new Hyperband()
+      .setEstimator(rf)
+      .setEvaluator(evaluator)
+      .setEstimatorParamMaps(paramGrid)
+      .setEta(5)
+      .setmaxResource(100)
+      .setLogFilePath("/home/eissa/debug.txt")
+      .setLogToFile(false)
+      .setCollectSubModels(false)
+
+    // 2- Train Validation Split
+    val tvs = new TrainValidationSplit()
+      .setEstimator(rf)
+      .setEvaluator(evaluator)
+      .setEstimatorParamMaps(paramGrid)
+      .setCollectSubModels(false)
+
+
+    // Run Hyperband & Train Validation Split Algorithm
+    //==================================================================================================================
+
+    //val pwLog1 = new PrintWriter(new File("/home/eissa/result.txt" ))
+    //pwLog1.write("--------------\n")
+
+
+    // 1- Run Hyperband, and choose the best set of parameters.
+    val s1 =  new java.util.Date().getTime
+    val model1 = hb.fit(trainingData)
+    val e1 =  new java.util.Date().getTime
+    val p1 = e1 - s1
+    val predictions1 = model1.bestModel.transform(testData)
+    val accuracy1 = evaluator.evaluate(predictions1)
+
+
+    // 2- Run train validation split, and choose the best set of parameters.
+    val s2 =  new java.util.Date().getTime
+    val model2 = tvs.fit(trainingData)
+    val e2 =  new java.util.Date().getTime
+    val p2 = e2 - s2
+    val predictions2 = model2.bestModel.transform(testData)
+    val accuracy2 = evaluator.evaluate(predictions2)
+
+
+    // 3- output the result
+    print("Hyperband :\n")
+    print("Elapsed Time (Second):" + p1 / 1000.0 + "\n")
+    print("Best Model accuracy:" + accuracy1  + "\n")
+    println(rf.numTrees.name + " = :" + model1.bestModel.extractParamMap().get(rf.numTrees))
+    println(rf.maxDepth.name + " = :" + model1.bestModel.extractParamMap().get(rf.maxDepth))
+    println(rf.maxBins.name + " = :" + model1.bestModel.extractParamMap().get(rf.maxBins))
+    println(rf.impurity.name + " = :" + model1.bestModel.extractParamMap().get(rf.impurity))
+    //print("Best Model Validation Mrtrics:" + model1.validationMetrics(0) + "\n")
+    //print("Best Model Hyper-Parameters:" + model1.bestModel.extractParamMap() + "\n")
+    print("======================================================================\n")
+
+    print("train validation split :\n")
+    print("Elapsed Time (Second):" + p2 / 1000.0 + "\n")
+    print("Best Model accuracy:" + accuracy2  + "\n")
+    println(rf.numTrees.name + " = :" + model2.bestModel.extractParamMap().get(rf.numTrees))
+    println(rf.maxDepth.name + " = :" + model2.bestModel.extractParamMap().get(rf.maxDepth))
+    println(rf.maxBins.name + " = :" + model2.bestModel.extractParamMap().get(rf.maxBins))
+    println(rf.impurity.name + " = :" + model2.bestModel.extractParamMap().get(rf.impurity))
+    //print("Best Model Validation Mrtrics:" + model2.validationMetrics.max + "\n")
+    //print("Best Model Hyper-Parameters:" + model2.bestModel.extractParamMap() + "\n")
+    //pwLog1.close()
+
+
+
+
+  }
+
+
+  def loadData( spark:SparkSession, ds: Int,  Path :String, hasHeader: Boolean, PresistData: Boolean = true, Partations: Int = 0) :DataFrame =
+  {
+
+    val datasets = Array( /*0- */"covtype.data" ,
+      /*1- */"census-income.data" ,
+      /*2- */"kddcup.data" ,
+      /*3- */"poker-hand-testing.data" ,
+      /*4- */"credit_card_clients.csv" ,
+      /*5- */"Sensorless_drive_diagnosis.csv" ,
+      /*6- */"Statlog_Shuttle.csv" ,
+      /*7- */"avila.txt" ,
+      /*8- */"SUSY.csv"
+    )
+
+    // Read Data
+    var rawdata = spark.read.option("header",hasHeader)
+      .option("inferSchema","true")
+      .format("csv")
+      .load(Path + datasets(ds))
+
+    //Partation it
+    if(Partations > 0 )
+      rawdata = rawdata.repartition(Partations)
+
+    //Persis it
+    if(PresistData)
+      rawdata.persist()
+
+    //Special cases
+    if(ds == 0)
+      rawdata = rawdata.withColumnRenamed("_c54" , "y")
+
+    if(ds == 1) {
+      rawdata = rawdata.withColumnRenamed("_c41", "y")
+
+      val indexer1 = new StringIndexer().setInputCol("_c1").setOutputCol("_c1_").fit(rawdata)
+      val indexer2 = new StringIndexer().setInputCol("_c4").setOutputCol("_c4_").fit(rawdata)
+      val indexer3 = new StringIndexer().setInputCol("_c6").setOutputCol("_c6_").fit(rawdata)
+      val indexer4 = new StringIndexer().setInputCol("_c7").setOutputCol("_c7_").fit(rawdata)
+      val indexer5 = new StringIndexer().setInputCol("_c8").setOutputCol("_c8_").fit(rawdata)
+      val indexer6 = new StringIndexer().setInputCol("_c9").setOutputCol("_c9_").fit(rawdata)
+      val indexer7 = new StringIndexer().setInputCol("_c10").setOutputCol("_c10_").fit(rawdata)
+      val indexer8 = new StringIndexer().setInputCol("_c11").setOutputCol("_c11_").fit(rawdata)
+      val indexer9 = new StringIndexer().setInputCol("_c12").setOutputCol("_c12_").fit(rawdata)
+      val indexer10 = new StringIndexer().setInputCol("_c13").setOutputCol("_c13_").fit(rawdata)
+      val indexer11 = new StringIndexer().setInputCol("_c14").setOutputCol("_c14_").fit(rawdata)
+      val indexer12 = new StringIndexer().setInputCol("_c15").setOutputCol("_c15_").fit(rawdata)
+      val indexer13 = new StringIndexer().setInputCol("_c19").setOutputCol("_c19_").fit(rawdata)
+      val indexer14 = new StringIndexer().setInputCol("_c20").setOutputCol("_c20_").fit(rawdata)
+      val indexer15 = new StringIndexer().setInputCol("_c21").setOutputCol("_c21_").fit(rawdata)
+      val indexer16 = new StringIndexer().setInputCol("_c22").setOutputCol("_c22_").fit(rawdata)
+      val indexer17 = new StringIndexer().setInputCol("_c23").setOutputCol("_c23_").fit(rawdata)
+      val indexer18 = new StringIndexer().setInputCol("_c25").setOutputCol("_c25_").fit(rawdata)
+      val indexer19 = new StringIndexer().setInputCol("_c26").setOutputCol("_c26_").fit(rawdata)
+      val indexer20 = new StringIndexer().setInputCol("_c27").setOutputCol("_c27_").fit(rawdata)
+      val indexer21 = new StringIndexer().setInputCol("_c28").setOutputCol("_c28_").fit(rawdata)
+      val indexer22 = new StringIndexer().setInputCol("_c29").setOutputCol("_c29_").fit(rawdata)
+      val indexer23 = new StringIndexer().setInputCol("_c31").setOutputCol("_c31_").fit(rawdata)
+      val indexer24 = new StringIndexer().setInputCol("_c32").setOutputCol("_c32_").fit(rawdata)
+      val indexer25 = new StringIndexer().setInputCol("_c33").setOutputCol("_c33_").fit(rawdata)
+      val indexer26 = new StringIndexer().setInputCol("_c34").setOutputCol("_c34_").fit(rawdata)
+      val indexer27 = new StringIndexer().setInputCol("_c35").setOutputCol("_c35_").fit(rawdata)
+      val indexer28 = new StringIndexer().setInputCol("_c37").setOutputCol("_c37_").fit(rawdata)
+
+
+      rawdata = indexer1.transform(rawdata).drop("_c1")
+      rawdata = indexer2.transform(rawdata).drop("_c4")
+      rawdata = indexer3.transform(rawdata).drop("_c6")
+      rawdata = indexer4.transform(rawdata).drop("_c7")
+      rawdata = indexer5.transform(rawdata).drop("_c8")
+      rawdata = indexer6.transform(rawdata).drop("_c9")
+      rawdata = indexer7.transform(rawdata).drop("_c10")
+      rawdata = indexer8.transform(rawdata).drop("_c11")
+      rawdata = indexer9.transform(rawdata).drop("_c12")
+      rawdata = indexer10.transform(rawdata).drop("_c13")
+      rawdata = indexer11.transform(rawdata).drop("_c14")
+      rawdata = indexer12.transform(rawdata).drop("_c15")
+      rawdata = indexer13.transform(rawdata).drop("_c19")
+      rawdata = indexer14.transform(rawdata).drop("_c20")
+      rawdata = indexer15.transform(rawdata).drop("_c21")
+      rawdata = indexer16.transform(rawdata).drop("_c22")
+      rawdata = indexer17.transform(rawdata).drop("_c23")
+      rawdata = indexer18.transform(rawdata).drop("_c25")
+      rawdata = indexer19.transform(rawdata).drop("_c26")
+      rawdata = indexer20.transform(rawdata).drop("_c27")
+      rawdata = indexer21.transform(rawdata).drop("_c28")
+      rawdata = indexer22.transform(rawdata).drop("_c29")
+      rawdata = indexer23.transform(rawdata).drop("_c31")
+      rawdata = indexer24.transform(rawdata).drop("_c32")
+      rawdata = indexer25.transform(rawdata).drop("_c33")
+      rawdata = indexer26.transform(rawdata).drop("_c34")
+      rawdata = indexer27.transform(rawdata).drop("_c35")
+      rawdata = indexer28.transform(rawdata) .drop("_c37")
+
+      import org.apache.spark.sql.functions._
+      rawdata = rawdata.withColumn("y", when(col("y") === " - 50000.", 0).otherwise("1").cast(org.apache.spark.sql.types.DataTypes.FloatType));
+
+    }
+
+    if(ds == 2) {
+
+      val indexer1 = new StringIndexer().setInputCol("_c1").setOutputCol("_c1_").fit(rawdata)
+      val indexer2 = new StringIndexer().setInputCol("_c2").setOutputCol("_c2_").fit(rawdata)
+      val indexer3 = new StringIndexer().setInputCol("_c3").setOutputCol("_c3_").fit(rawdata)
+      val indexer4 = new StringIndexer().setInputCol("_c41").setOutputCol("y").fit(rawdata)
+
+      rawdata = indexer1.transform(rawdata).drop("_c1")
+      rawdata = indexer2.transform(rawdata).drop("_c2")
+      rawdata = indexer3.transform(rawdata).drop("_c3")
+      rawdata = indexer4.transform(rawdata).drop("_c41")
+
+    }
+
+    if(ds == 3) {
+
+      rawdata = rawdata.withColumnRenamed("_c10", "y")
+    }
+
+    if(ds == 6) {
+      rawdata = rawdata.withColumnRenamed("_c9" , "y")
+
+    }
+
+    if(ds == 7) {
+      rawdata = rawdata.withColumnRenamed("_c10" , "y")
+
+    }
+
+
+
+    //return it
+    rawdata
+
+  }
+
+
+
+}
