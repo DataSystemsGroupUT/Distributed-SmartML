@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="DSmartML:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/DSmartML_jar</output-path>
+    <root id="archive" name="DSmartML.jar">
+      <element id="module-output" name="DSmartML" />
+    </root>
+  </artifact>
+</component>
