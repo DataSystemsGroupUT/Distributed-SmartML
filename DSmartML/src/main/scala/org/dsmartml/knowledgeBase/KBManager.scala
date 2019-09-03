@@ -1,6 +1,8 @@
 //package org.apache.spark.ml.tuning
-package org.dsmartml
+package org.dsmartml.knowledgeBase
 
+import java.nio.file.StandardCopyOption
+import org.dsmartml._
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.classification._
 import org.apache.spark.ml.feature.VectorAssembler
@@ -8,6 +10,7 @@ import org.apache.spark.ml.linalg.DenseMatrix
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -155,9 +158,10 @@ class KBManager(spark:SparkSession, logger:Logger, TargetCol:String = "y") exten
   /**
     * this function Create Classisification Model based on the Knowledgebase data, this model will be used to do algorithm selection based on the dataset metadata
     */
-  def CreateKBModel(): Unit =  {
+  def CreateKBModel(): GBTClassificationModel =  {
     var KBModelaccuracyMap = Map[String, Double]()
-    var df = LoadKB()
+    //var df = LoadKB()
+    var df = KBManager.getKBDF(spark)
     var featurecolumns = df.columns.filter(c => c != KBManager.label)
     // vector assembler
     val assembler = new VectorAssembler()
@@ -179,7 +183,8 @@ class KBManager(spark:SparkSession, logger:Logger, TargetCol:String = "y") exten
 
     try {
       val model_gbt = gbt.fit(trainingData)
-      model_gbt.save(KBManager.KBModelPath)
+      //model_gbt.save(KBManager.KBModelPath)
+      /*
       val predictions_gbt = model_gbt.transform(testData)
       import spark.implicits._
       val output = predictions_gbt.select( "label" ,"prediction"  ).map(x=> (x.getInt(0).toDouble,x.getDouble(1))).rdd
@@ -196,12 +201,15 @@ class KBManager(spark:SparkSession, logger:Logger, TargetCol:String = "y") exten
       println("Recall" + recall)
       println("F-Score" + fscore)
       println("----------------------------------------------------------------")
+      */
+      return model_gbt
     } catch
       {
         case ex: Exception => //KBModelaccuracyMap += ("RandomForestClassifier" -> -1)
           logger.logException("KB => GBT:"+ ex.getMessage + "\n")
           println(ex.getMessage)
           println("**********************************************************")
+          return null
       }
     /*
         // 3-
@@ -243,17 +251,137 @@ class KBManager(spark:SparkSession, logger:Logger, TargetCol:String = "y") exten
           }
     */
   }
-
   /**
     * this function Load Classisification Model based on the Knowledgebase data
     * @return the Model used to predict any dataset best algorithm based on our KB
     */
   def LoadKBModel(): GBTClassificationModel = {
+    CopyModelFromJAR()
     ///media/eissa/New/data/KBModel1
     //val KBModel = GBTClassificationModel.load(KBManager.KBModelPath )
-    val KBModel = GBTClassificationModel.load(KBManager.KBModelPath )
+    println("===> load Model from:"+ KBManager.KBModelPath)
+
+    try {
+      println("1")
+      val KBModel1 = GBTClassificationModel.load( "file:/home/eissa_abdelrahman5/KBModel/")
+      println("2")
+
+    }catch {
+      case ex:Exception => println(ex.getMessage)
+      case ex:Exception => println(ex.getStackTrace.toString)
+    }
+    try {
+
+      println("3")
+      val KBModel2 = GBTClassificationModel.load( "file://home/eissa_abdelrahman5/KBModel/")
+      println("4")
+
+    }catch {
+      case ex:Exception => println(ex.getMessage)
+      case ex:Exception => println(ex.getStackTrace.toString)
+    }
+    try {
+
+      println("5")
+      val KBModel3 = GBTClassificationModel.load( "file:///home/eissa_abdelrahman5/KBModel/")
+      println("6")
+
+    }catch {
+      case ex:Exception => println(ex.getMessage)
+      case ex:Exception => println(ex.getStackTrace.toString)
+    }
+
+    try {
+
+      println("7")
+      val KBModel4 = GBTClassificationModel.load( "file://KBModel/")
+      println("8")
+    }catch {
+      case ex:Exception => println(ex.getMessage)
+      case ex:Exception => println(ex.getStackTrace.toString)
+    }
+
+    try {
+
+      println("9")
+      val KBModel5 = GBTClassificationModel.load( "file:///KBModel/")
+      println("10")
+    }catch {
+      case ex:Exception => println(ex.getMessage)
+      case ex:Exception => println(ex.getStackTrace.toString)
+    }
+
+
+    try {
+      println("11")
+      val KBModel1 = GBTClassificationModel.load("gs://sparkstorage/KBModel/")
+      println("12")
+    }catch {
+      case ex:Exception => println(ex.getMessage)
+      case ex:Exception => println(ex.getStackTrace.toString)
+    }
+
+
+    try {
+      println("3")
+    import scala.io.Source
+    val filename = "file://" + KBManager.KBModelPath + "/metadata/part-00000"
+    for (line <- Source.fromFile(filename).getLines) {
+      println("==" + line)
+    }
+    }catch {
+      case ex:Exception => println(ex.getMessage)
+      case ex:Exception => println(ex.getStackTrace.toString)
+    }
+
+    val KBModel = GBTClassificationModel.load(KBManager.KBModelPath)
     return KBModel
   }
+
+  def CopyModelFromJAR() = {
+    try {
+
+      //Read All files as stream
+      var is_data_1 = this.getClass().getResourceAsStream("/KBModel/data/_SUCCESS")
+      var is_data_2 = this.getClass().getResourceAsStream("/KBModel/data/part-00000-3fb024f1-06fe-453e-9eb1-cb06523920a6-c000.snappy.parquet")
+      var is_metadata_1 = this.getClass().getResourceAsStream("/KBModel/metadata/_SUCCESS")
+      var is_metadata_2 = this.getClass().getResourceAsStream("/KBModel/metadata/part-00000")
+      var is_treesmetadata_1 = this.getClass().getResourceAsStream("/KBModel/treesMetadata/_SUCCESS")
+      var is_treesmetadata_2 = this.getClass().getResourceAsStream("/KBModel/treesMetadata/part-00000-35ca87d6-56ac-48f6-b502-af20da817c4e-c000.snappy.parquet")
+
+      //Create folders
+      val currentDirectory = new java.io.File(".").getCanonicalPath
+      var p_KBModel : java.nio.file.Path = java.nio.file.Paths.get(currentDirectory.toString + "/KBModel");
+      var p_data : java.nio.file.Path = java.nio.file.Paths.get(currentDirectory.toString + "/KBModel/data");
+      var p_metadata : java.nio.file.Path = java.nio.file.Paths.get(currentDirectory.toString + "/KBModel/metadata");
+      var p_treesMetadata : java.nio.file.Path = java.nio.file.Paths.get(currentDirectory.toString + "/KBModel/treesMetadata");
+      java.nio.file.Files.createDirectories(p_KBModel)
+      java.nio.file.Files.createDirectories(p_data)
+      java.nio.file.Files.createDirectories(p_metadata)
+      java.nio.file.Files.createDirectories(p_treesMetadata)
+
+      //create paths to files
+      var p_data_1 : java.nio.file.Path = java.nio.file.Paths.get(currentDirectory.toString + "/KBModel/data/_SUCCESS")
+      var p_data_2 : java.nio.file.Path = java.nio.file.Paths.get(currentDirectory.toString + "/KBModel/data/part-00000-3fb024f1-06fe-453e-9eb1-cb06523920a6-c000.snappy.parquet");
+      var p_metadata_1 : java.nio.file.Path = java.nio.file.Paths.get(currentDirectory.toString + "/KBModel/metadata/_SUCCESS");
+      var p_metadata_2 : java.nio.file.Path = java.nio.file.Paths.get(currentDirectory.toString + "/KBModel/metadata/part-00000");
+      var p_treesMetadata_1 : java.nio.file.Path = java.nio.file.Paths.get(currentDirectory.toString + "/KBModel/treesMetadata/_SUCCESS");
+      var p_treesMetadata_2 : java.nio.file.Path = java.nio.file.Paths.get(currentDirectory.toString + "/KBModel/treesMetadata/part-00000-35ca87d6-56ac-48f6-b502-af20da817c4e-c000.snappy.parquet");
+
+      //copy files to new location
+      java.nio.file.Files.copy(is_data_1,p_data_1 , StandardCopyOption.REPLACE_EXISTING)
+      java.nio.file.Files.copy(is_data_2,p_data_2 , StandardCopyOption.REPLACE_EXISTING)
+      java.nio.file.Files.copy(is_metadata_1,p_metadata_1 , StandardCopyOption.REPLACE_EXISTING)
+      java.nio.file.Files.copy(is_metadata_2,p_metadata_2 , StandardCopyOption.REPLACE_EXISTING)
+      java.nio.file.Files.copy(is_treesmetadata_1,p_treesMetadata_1 , StandardCopyOption.REPLACE_EXISTING)
+      java.nio.file.Files.copy(is_treesmetadata_2,p_treesMetadata_2 , StandardCopyOption.REPLACE_EXISTING)
+
+    }
+    catch {
+      case e:Exception => println("Exception" + e.getMessage)
+    }
+  }
+
 
   /**
     * Predict Good Classification Algorithm based on the KBModel
@@ -310,19 +438,30 @@ class KBManager(spark:SparkSession, logger:Logger, TargetCol:String = "y") exten
     import spark.implicits._
 
     val df_f = output.select( "c_27" , "features")
-    var r = LoadKBModel().transform(df_f)
+
+
+    //var r = LoadKBModel().transform(df_f)
+    var r = CreateKBModel().transform(df_f)
     var selectedclassifiers = r.select("c_27" ).filter("prediction == 1.0").sort("probability").map(x => x.getAs[Double](0)).collect()
-    println("2 - Algorithm Selection based on our KB")
+    print("2 - Algorithm Selection based on our KB and Dataset Metadata")
+    logger.logOutput("2 - Algorithm Selection based on our KB and Dataset Metadata")
+
     val Endtime1 = new java.util.Date().getTime
     val TotalTime1 = Endtime1 - starttime1
-    println("   --Total Time:" + (TotalTime1/1000.0).toString )
+    println(" (Step Time:" + (TotalTime1/1000.0).toString  +" Sec.)")
+    logger.logOutput(" (Step Time:" + (TotalTime1/1000.0).toString  +" Sec.)\n")
     var SelectedClassifiersNames = ""
     var res = ClassifiersManager.SortedSelectedClassifiers(selectedclassifiers)
     for ( i <- res) {
       SelectedClassifiersNames = SelectedClassifiersNames + "," + ClassifiersManager.classifiersLsit(i.toInt)
     }
-    println("   --Predicted Best Classifiers:" + SelectedClassifiersNames)
-    println("-----------------------------------------------------------------------------------")
+    println("   -- Selected Classifiers:" )
+    logger.logOutput("   -- Selected Classifiers:\n")
+    SelectedClassifiersNames.split(",").foreach( x => if(x.length > 2) println("     - " + x))
+    SelectedClassifiersNames.split(",").foreach( x => if(x.length > 2) logger.logOutput("     - " + x + "\n"))
+    logger.printLine()
+    logger.logLine()
+
 
 
     return  res
@@ -334,7 +473,59 @@ class KBManager(spark:SparkSession, logger:Logger, TargetCol:String = "y") exten
 }
 
 
+
+
 object KBManager extends java.io.Serializable{
+
+
+  def getKBDF(spark:SparkSession) :DataFrame = {
+
+    val schema = new StructType()
+      .add(StructField("nr_instances",            DoubleType, true))
+      .add(StructField("log_nr_instances",        DoubleType, true))
+      .add(StructField("nr_features",             DoubleType, true))
+      .add(StructField("log_nr_features",         DoubleType, true))
+      .add(StructField("nr_classes",              DoubleType, true))
+      .add(StructField("nr_numerical_features",   DoubleType, true))
+      .add(StructField("nr_categorical_features", DoubleType, true))
+      .add(StructField("ratio_num_cat",           DoubleType, true))
+      .add(StructField("class_entropy",           DoubleType, true))
+      .add(StructField("missing_val",             DoubleType, true))
+      .add(StructField("ratio_missing_val",       DoubleType, true))
+      .add(StructField("max_prob",                DoubleType, true))
+      .add(StructField("min_prob",                DoubleType, true))
+      .add(StructField("mean_prob",               DoubleType, true))
+      .add(StructField("std_dev",                 DoubleType, true))
+      .add(StructField("dataset_ratio",           DoubleType, true))
+      .add(StructField("symbols_sum",             DoubleType, true))
+      .add(StructField("symbols_mean",            DoubleType, true))
+      .add(StructField("symbols_std_dev",         DoubleType, true))
+      .add(StructField("skew_min",                DoubleType, true))
+      .add(StructField("skew_max",                DoubleType, true))
+      .add(StructField("skew_mean",               DoubleType, true))
+      .add(StructField("skew_std_dev",            DoubleType, true))
+      .add(StructField("kurtosis_min",            DoubleType, true))
+      .add(StructField("kurtosis_max",            DoubleType, true))
+      .add(StructField("kurtosis_mean",           DoubleType, true))
+      .add(StructField("kurtosis_std_dev",        DoubleType, true))
+      .add(StructField("AlgorithmId",             DoubleType, true))
+      .add(StructField("label",                   DoubleType, true))
+
+
+    val rows = (KB_Part1.KB.union(KB_Part2.KB).union(KB_Part3.KB)).map{x => Row(x:_*)}
+    val rdd = spark.sparkContext.makeRDD(rows)
+    var df = spark.createDataFrame(rdd,schema)
+    df = df.withColumn("label", df("label").cast(org.apache.spark.sql.types.DataTypes.IntegerType))
+    /*
+    var KBDF = spark.sparkContext.parallelize(KB_Part1.KB.union(KB_Part2.KB).union(KB_Part3.KB))
+    import org.apache.spark.sql.SparkSession
+    //var KBDF = spark.createDataFrame(  )
+    KBDF = KBDF.toDF(cols:_*)
+    KBDF = KBDF.drop("dataset").drop("Algorithm").drop("Order")
+      .drop("accuracy").drop("y2").drop("y3")
+      */
+    return df
+  }
   // KB csv file path
   var KBpath = "/media/eissa/New/data/KB_Main.csv"
   // KB Label
@@ -342,6 +533,8 @@ object KBManager extends java.io.Serializable{
   //KB Saved Model File
   //val KBModelPath = "/media/eissa/New/data/KBModel"
   //val KBModelPath = "wasb:///example/data/KBModel"
-  val KBModelPath = "gs://sparkstorage/KBModel"
+  //val KBModelPath = "gs://sparkstorage/KBModel"
+
+  val KBModelPath = new java.io.File(".").getCanonicalPath.toString+ "/KBModel" //this.getClass().getResource("KBModel").getPath// "KBModel"
 
 }

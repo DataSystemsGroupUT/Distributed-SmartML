@@ -2,6 +2,7 @@ package org.apache.spark.ml.tuning
 //package org.dsmartml
 
 
+import java.text.DecimalFormat
 import java.util.{Date, Locale, List => JList}
 
 import org.apache.hadoop.fs.Path
@@ -121,6 +122,12 @@ trait HyperbandParams extends ValidatorParams {
 
 }
 
+trait OptimizerResult
+{
+  var bestParam :ParamMap = null
+  var bestModel :Model[_] = null
+  var bestmetric :Double = 0.0
+}
 /**
   * Class Name: Hyperband
   * Description: this calss represent hyperband implementation & it support parallelism
@@ -132,11 +139,12 @@ trait HyperbandParams extends ValidatorParams {
 class Hyperband (@Since("1.5.0") override val uid: String)
   extends Estimator[HyperbandModel]
     with HyperbandParams with HasParallelism with HasCollectSubModels
+    with OptimizerResult
     with MLWritable with Logging {
 
-  var bestParam :ParamMap = null
-  var bestModel :Model[_] = null
-  var bestmetric :Double = 0.0
+  val fm2d = new DecimalFormat("###.##")
+  val fm4d = new DecimalFormat("###.####")
+
   var filelog :Logger = null
   var ClassifierParamsMapIndexed =  Map[Int,ParamMap]()
   var ClassifiersMgr: ClassifiersManager = null
@@ -186,7 +194,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
   @Since("2.3.0")
   def setmaxTime(value: Long): this.type = set(maxTime, value)
 
-  val StartingTime:Date = new Date()
+  var StartingTime:Date = new Date()
 
   def IsTimeOut(): Boolean =
   {
@@ -323,7 +331,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     var firstSH = true
     // loop (number of successive halving, with different number of hyper-parameters configurations)
     // incearsing number of configuration mean decreasing the resource per each configuration
-    for( s <- s_max-1  to 0 by -1) {
+    for( s <- s_max  to 0 by -1) {
       if (!IsTimeOut()) {
 
         //initial number of configurations
@@ -334,9 +342,10 @@ class Hyperband (@Since("1.5.0") override val uid: String)
         //initial number of resources to run configurations for
         var r = max_Resource * math.pow(eeta, (-s))
         //println("   - Initial resource percentage to check =" + r)
-        filelog.logException("=================================================================================================\n")
-        filelog.logException("     -- Successive Halving Session:" + s + " , with Max Resource = " + formatter.format(r) + " and Hyperparameter values to check  "  + n +"\n")
-        println("     -- Successive Halving Session:" + s + " , with Max Resource = " + formatter.format(r) + " and Hyperparameter values to check  "  + n )
+        //filelog.logException("=================================================================================================\n")
+        //filelog.logException("     -- Successive Halving Session:" + s + " , Starting with " + formatter.format(r) + " of data and "  + n +" Models to train\n")
+        println("     -- Successive Halving Session:" + s + " , Starting with " + formatter.format(r) + "% of data and "  + n +" Models to train")
+        filelog.logOutput("     -- Successive Halving Session:" + s + " , Starting with " + formatter.format(r) + "% of data and "  + n +" Models to train\n")
 
         val rsult = sh(dataset, n.toInt, r, s.toInt , firstSH)
 
@@ -365,6 +374,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       else
         {
           println("     --Time out @ Main Hyperband loop")
+          filelog.logOutput("     --Time out @ Main Hyperband loop\n")
           return currentResult
         }
     }
@@ -430,7 +440,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
         //filelog.logException(p.param.name + ":" + p.value  + "\n")
       }
 
-      filelog.logException(" -->>" + s12 + "\n")
+      //filelog.logException(" -->>" + s12 + "\n")
       s12 = ""
     }
 
@@ -440,20 +450,23 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
     for ( i <-  0 to (s ).toInt)
     {
-      println("       -- Number of items:" + currentResult.size )
+      //println("       -- Number of items:" + currentResult.size )
       if( !IsTimeOut()) {
         //Run each of the n_i configs for r_i iterations and keep best n_i/eta
         var n_i = n * math.pow(eeta, (-i))
         var r_i: Double = r * math.pow(eeta, (i))
-        filelog.logException("-- Loop Number " + i + " , check " + n_i + "Hyperparameter values on " + formatter.format(r_i) + "% of the data\n")
-        println("       -- Loop Number " + i + " , check " + n_i + "Hyperparameter values on " + formatter.format(r_i) + "% of the data")
+        //filelog.logException("-- Loop Number " + i + " , check " + n_i + "Hyperparameter values on " + formatter.format(r_i) + "% of the data\n")
+        print("       -- Loop Number " + i + " , Train " + n_i + " Models on " + formatter.format(r_i) + "% of the data")
+        filelog.logOutput("       -- Loop Number " + i + " , Train " + n_i + " Models on " + formatter.format(r_i) + "% of the data")
         //var resultParam =
           if (i == 0) {
             var tmp = learn(dataset, SelectedParamsMapIndexed, r_i)
             if( tmp.size > 0)
               currentResult = tmp
-            else
+            else {
               println("      -- learn return null at first loop in this sh")
+              filelog.logOutput("      -- learn return null at first loop in this sh\n")
+            }
 
           }
           else {
@@ -467,15 +480,19 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
            if(  tmp.size > 0)
               currentResult = tmp
-            else
-              println("       --learn return null at this loop and we have:" + currentResult.size + " items in the list" )
-          }
+            else {
+              println("       --learn return null at this loop and we have:" + currentResult.size + " items in the list")
+              filelog.logOutput("       --learn return null at this loop and we have:" + currentResult.size + " items in the list\n")
+           }
+           }
       }
       else
       {
         println("       -- Time out @ SH")
+        filelog.logOutput("       -- Time out @ SH\n")
         if(currentResult.size > 0 ) {
-          println("       --> best accuracy (after time out) in this sh:" + ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2  )
+          println("       --> best accuracy (after time out) in this sh:" + fm4d.format( 100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1 ) + "%")
+          filelog.logOutput("       --> best accuracy (after time out) in this sh:" + fm4d.format(100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1) + "%\n" )
 
           val ind = currentResult.maxBy{ case (key, value) => value._1 }._1
           val res = currentResult.filterKeys( k => k == ind)
@@ -489,7 +506,8 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     }
     // return best hyper parameters for this SH run
     if(currentResult.size > 0 ) {
-      println("       -- best accuracy (after end of sh) in this sh:" + ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2  )
+      println("       -->> best accuracy for this session:" + fm4d.format( 100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1  )) + "%"
+      filelog.logOutput("       -->> best accuracy for this session:" + fm4d.format( 100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1) + "%\n" )
 
       val ind = currentResult.maxBy{ case (key, value) => value._1 }._1
       val res = currentResult.filterKeys( k => k == ind)
@@ -521,7 +539,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       val eval = $(evaluator)
       val epm = param.values.toList
       val shouldLogtoFile = $(logToFile)
-
+      val starttime1 = new java.util.Date().getTime
 
       // Create execution context based on $(parallelism)
       val executionContext = getExecutionContext
@@ -614,8 +632,14 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       trainingDataset.unpersist()
       validationDataset.unpersist()
 
+      val Endtime1 = new java.util.Date().getTime
+      val TotalTime1 = Endtime1 - starttime1
+      print(" , Time(" + (TotalTime1/1000.0).toString + ") ")
+      filelog.logOutput(" , Time(" + (TotalTime1/1000.0).toString + ") ")
 
-      //println("     ------ best is " + sortedIterResultMap.head._2 + "-----")
+      println(" and Best Accuracy is: " +fm4d.format( 100 * sortedIterResultMap.head._2._1 ) + "%")
+      filelog.logOutput(" and Best Accuracy is: " + fm4d.format( 100 * sortedIterResultMap.head._2._1) + "%\n" )
+
       sortedIterResultMap
    }catch
       {
@@ -701,7 +725,7 @@ object Hyperband extends MLReadable[Hyperband] {
   * @param validationMetrics Evaluated validation metrics.
   */
 @Since("1.5.0")
-class HyperbandModel private[ml] (
+class HyperbandModel  (
                                    @Since("1.5.0") override val uid: String,
                                    @Since("1.5.0") val bestModel: Model[_],
                                    @Since("1.5.0") val validationMetrics: Array[Double]) extends Model[HyperbandModel] with HyperbandParams with MLWritable {

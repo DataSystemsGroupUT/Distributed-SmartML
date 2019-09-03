@@ -1,20 +1,11 @@
 package org.dsmartml.examples
 
-import com.salesforce.op.OpWorkflow
-import com.salesforce.op.evaluators.Evaluators
-import com.salesforce.op.features.FeatureBuilder
-import com.salesforce.op.features.types.RealNN
-import com.salesforce.op.stages.impl.classification.MultiClassificationModelSelector
-import com.salesforce.op.stages.impl.tuning.DataCutter
-import org.apache.spark.ml.classification.RandomForestClassifier
-import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.mllib.tree.RandomForest
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.DoubleType
 import org.dsmartml._
 
-object App_Test {
+object App_GetBestModel {
 
 
   def main(args: Array[String]): Unit = {
@@ -39,11 +30,14 @@ object App_Test {
     //var logpath = "/home/sshuser/"
 
 
-
+    // Dataset
     val i = args(0).toInt
-    //val j = args(1).toInt
-    //val t = 100//args(2).toInt
-    //val p = 3 //args(3).toInt
+    // type (Grid Search, TransmogrifAI, Random Search, DSmart ML)
+    val j = args(1).toInt
+    // Time Limit
+    val t = args(2).toInt
+    // Parallelism
+    val p = 3 //args(3).toInt
 
     var TargetCol = "y"
 
@@ -61,18 +55,9 @@ object App_Test {
       //.config("spark.executor.cores" , 7)
       .getOrCreate()
 
-
-
     // Set Log Level to error only (don't show warning)
     spark.sparkContext.setLogLevel("ERROR")
 
-
-
-    var featuresCol = "features"
-
-
-    //for ( i <- Seq(4,5,7,10,13,25,30,48,59,69,74,76) ) {
-    //  for ( i <- Seq(48,59,69,74,76) ) {
     //Create Logger Instance
     var logger = new Logger(logpath)
     try{
@@ -80,31 +65,38 @@ object App_Test {
       // Load Dataset
       var dataloader = new DataLoader(spark, i, dataFolderPath, logger)
       var rawdata = dataloader.getData()
-      logger.logOutput("Data set number :" + i + "\n")
-      logger.logOutput("============================================================ \n")
-      //var rawdata = ExampleDataset.getDataset(spark, dataFolderPath , i)
-      var dataset = DataLoader.convertDFtoVecAssembly(rawdata, "features",TargetCol )
-      val Array(train, test) = dataset.randomSplit(Array(0.8, 0.2))
 
-      val rf = new RandomForestClassifier()
-        .setLabelCol(TargetCol)
-        .setFeaturesCol(featuresCol)
-        .setImpurity("gini")
-        .setMaxBins(32)
-        .setNumTrees(62)
-        .setMaxDepth(13)
-        .setMinInfoGain(0.001)
-        .setMinInstancesPerNode(1)
-      val model = rf.fit(train)
-      val pre = model.transform(test)
 
-      val evaluator = new MulticlassClassificationEvaluator()
-        .setLabelCol(TargetCol)
-        .setPredictionCol("prediction")
-        .setMetricName("accuracy")
+      // get best Model for this dataset using Distributed SmartML Library
+      //===================================================================================
+      if (j == 1 || j == 2 ) {
+        //for (ti <- Array(20,40,60,80,100) ){
+        try {
+          var mselector = new ModelSelector(spark, logger, eta = 3, maxResourcePercentage = 100, HP_MaxTime = t, Parallelism = p, TryNClassifier = 6, HPOptimizer = j)
+          var res = mselector.getBestModel(rawdata)
+        }
+        catch {
+          case ex: Exception => println(ex.getMessage)
+        }
+      }
 
-      val metric = evaluator.evaluate(pre)
-      println("     - Accuracy:" + metric )
+      // Grid Search
+      //===================================================================================
+      if (j == 3) {
+        println("Grid Search")
+        val starttime2 = new java.util.Date().getTime
+        logger.logOutput("============= Grid Search============================================= \n")
+        var grdSearchMgr: GridSearchManager = new GridSearchManager()
+        var res2 = grdSearchMgr.Search(spark, rawdata)
+        logger.logOutput("--Best Algorithm:" + res2._1 + " \n")
+        logger.logOutput("--Accuracy:" + res2._2._3 + " \n")
+        val Endtime2 = new java.util.Date().getTime
+        val TotalTime2 = Endtime2 - starttime2
+        logger.logOutput("--Total Time:" + (TotalTime2 / 1000.0).toString + " \n")
+        if (res2._2._2 != null)
+          logger.logOutput("Parameters:" + res2._2._2 + " \n")
+        logger.logOutput("===================================================================== \n")
+      }
 
     }
     catch{
@@ -114,7 +106,6 @@ object App_Test {
     }
     //println("Model summary:\n" + model.summaryPretty())
     logger.close()
-    //}
   }
 
 

@@ -26,6 +26,11 @@ import scala.collection.immutable.ListMap
 */
 class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y") {
 
+  import java.text.DecimalFormat
+
+  val fm2d = new DecimalFormat("###.##")
+  val fm4d = new DecimalFormat("###.####")
+
   /**
     * this function Extract statistical and calssification metadata
     * @param rawdata the input dataset that we need to extract its  metadata
@@ -44,34 +49,39 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
     */
   def ExtractStatisticalMetadata(rawdata:DataFrame ): DatasetMetadata = {
 
-    println("1 - Extract Statistical Metadata")
+    print("1 - Extract Statistical Metadata ")
+    logger.logOutput("1 - Extract Statistical Metadata ")
     var metadata: DatasetMetadata = new DatasetMetadata()
     val starttime  =  new java.util.Date().getTime
 
 
 
 
-    val starttime1 =  new java.util.Date().getTime
+
     // # Drop raw if all of its values are missing
     var df = rawdata.na.drop(1)
 
     //1- number of instances
+    val starttime_countInstances =  new java.util.Date().getTime
     metadata.nr_instances = df.count()
+    val endtime_countInstances =  new java.util.Date().getTime
 
     //2- log of umber of instances
     metadata.log_nr_instances = math.log(metadata.nr_instances)
 
     //3- Number of Features
+    val starttime_countFeatures =  new java.util.Date().getTime
     var features: Array[String] = df.columns.filter(c => c != TargetCol)
     metadata.nr_features = features.length
+    val endtime_countFeatures =  new java.util.Date().getTime
 
     //4- log number of Features
     metadata.log_nr_features = math.log(metadata.nr_features)
-    val Endtime1 =  new java.util.Date().getTime
-    println("    - Count instances:" + (Endtime1 - starttime1) )
+
+    //println("    - Count instances:" + (Endtime1 - starttime1) )
     //5- Features Statistics
     //====================================================================================================
-    val MissingValueCountt3 =  new java.util.Date().getTime
+    val starttime_MissingValueCount =  new java.util.Date().getTime
     var cond : Column = null
     var currcol: Array[String] = null
     var columncounter = 0
@@ -135,9 +145,9 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
     if (ColumnMinValMap.values.toArray.filter(d => d < 0).length > 0)
       metadata.hasNegativeFeatures = true
 
-    val MissingValueCountt4 =  new java.util.Date().getTime
-    println("    - Count Missing Values, Kur, skew, min:" + (MissingValueCountt4 - MissingValueCountt3) )
-    logger.logTime("Categorical & Continuse Features Statistics:" + (MissingValueCountt4 - MissingValueCountt3) + ",")
+    val endtime_MissingValueCount =  new java.util.Date().getTime
+    //println("    - Count Missing Values, Kur, skew, min:" + (MissingValueCountt4 - MissingValueCountt3) )
+    //logger.logTime("Categorical & Continuse Features Statistics:" + (MissingValueCountt4 - MissingValueCountt3) + ",")
 
 
     //6- Ratio of missing value
@@ -148,7 +158,7 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
     // here i will remove coulmn with constant value
     // will remove column with non numeric data type
     // accepted type are : ByteType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType
-    val CountFeaturesTypet1 =  new java.util.Date().getTime
+    val starttime_CountFeaturesTypet =  new java.util.Date().getTime
     import scala.collection.mutable.ListBuffer
     var numerical = new ListBuffer[String]()
     var categorical = new ListBuffer[String]()
@@ -172,9 +182,9 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
     metadata.nr_numerical_features = numerical.length
     metadata.nr_categorical_features = categorical.length
     val Endtime3 =  new java.util.Date().getTime
-    val CountFeaturesTypet2 =  new java.util.Date().getTime
-    logger.logTime("Count Categorical & Continuse Features:" + (CountFeaturesTypet2 - CountFeaturesTypet1) + ",")
-    println("    - Count Categorical & Continuse Features:" + (CountFeaturesTypet2 - CountFeaturesTypet1) + ",")
+    val endtime_CountFeaturesTypet =  new java.util.Date().getTime
+    //logger.logTime("Count Categorical & Continuse Features:" + (CountFeaturesTypet2 - CountFeaturesTypet1) + ",")
+    //println("    - Count Categorical & Continuse Features:" + (CountFeaturesTypet2 - CountFeaturesTypet1) + ",")
 
     //10  Ratio of Categorical to Numerical Features - DONE
     metadata.ratio_num_cat = 999999999.0
@@ -184,7 +194,7 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
 
     // =====> Classes  Statistics
     // ===================================================================================================
-    val ClassesStatt1 =  new java.util.Date().getTime
+    val starttime_classess =  new java.util.Date().getTime
     //11- Class Entropy - DONE
     var prob_classes = new ListBuffer[Double]()
     metadata.class_entropy = 0.0
@@ -221,15 +231,16 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
 
     // 16 -  Dataset Ratio - DONE
     metadata.dataset_ratio = metadata.nr_features.toDouble / metadata.nr_instances.toDouble
-    val ClassesStatt2 =  new java.util.Date().getTime
-    logger.logTime("Classes Entropy & Statistics:" + (ClassesStatt2 - ClassesStatt1) + ",")
-    println("    - Classes Entropy & Statistics:" + (ClassesStatt2 - ClassesStatt1) + ",")
+    val endtime_classess =  new java.util.Date().getTime
+    //logger.logTime("Classes Entropy & Statistics:" + (ClassesStatt2 - ClassesStatt1) + ",")
+    //println("    - Classes Entropy & Statistics:" + (ClassesStatt2 - ClassesStatt1) + ",")
 
 
     // =====> Categorical Features Statistics
     // ===================================================================================================
     // ByteType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType
     val CategoricalFeatureStatt1 =  new java.util.Date().getTime
+    var CategoricalFeatureStatt2 =  new java.util.Date().getTime
     var symbols = new ListBuffer[Double]()
 
     if (categorical.length > 0) {
@@ -243,9 +254,9 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
       //19- Symbols Standard Deviation - DONE
       metadata.symbols_std_dev = math.pow(symbols.map(i => math.pow((i - metadata.symbols_mean), 2)).sum / categorical.length, 0.5)
 
-      val CategoricalFeatureStatt2 =  new java.util.Date().getTime
-      logger.logTime("Categorical Features Statistics:" + (CategoricalFeatureStatt2 - CategoricalFeatureStatt1) + ",")
-      println("    - Categorical Features Statistics:" + (CategoricalFeatureStatt2 - CategoricalFeatureStatt1) + ",")
+      CategoricalFeatureStatt2 =  new java.util.Date().getTime
+      //logger.logTime("Categorical Features Statistics:" + (CategoricalFeatureStatt2 - CategoricalFeatureStatt1) + ",")
+      //println("    - Categorical Features Statistics:" + (CategoricalFeatureStatt2 - CategoricalFeatureStatt1) + ",")
 
 
     }
@@ -254,6 +265,7 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
     // Numerical Features Statistics
     //===========================================================================
     val NumericalFeatureStatt1 =  new java.util.Date().getTime
+    var NumericalFeatureStatt2 =  new java.util.Date().getTime
     var skewness_values = new Array[Double](numerical.length)
     var kurtosis_values = new Array[Double](numerical.length)
     var counter = 0
@@ -287,23 +299,34 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
       // 27. Kurtosis Standard Deviation - DONE
       metadata.kurtosis_std_dev = math.pow(kurtosis_values.map(i => math.pow((i - metadata.kurtosis_mean), 2)).sum / kurtosis_values.length, 0.5)
 
-      val NumericalFeatureStatt2 =  new java.util.Date().getTime
-      logger.logTime("Numerical Feature Statistics:" + (NumericalFeatureStatt2 - NumericalFeatureStatt1) + ",")
-      println("    -Numerical Feature Statistics:" + (NumericalFeatureStatt2 - NumericalFeatureStatt1) + ",")
+      NumericalFeatureStatt2 =  new java.util.Date().getTime
+      //logger.logTime("Numerical Feature Statistics:" + (NumericalFeatureStatt2 - NumericalFeatureStatt1) + ",")
+      //println("    -Numerical Feature Statistics:" + (NumericalFeatureStatt2 - NumericalFeatureStatt1) + ",")
     }
 
     val Endtime =  new java.util.Date().getTime
     val TotalTime = Endtime - starttime
-    logger.logTime("Meta Data Extraction Time:" + TotalTime.toString + ",")
+    //logger.logTime("Meta Data Extraction Time:" + TotalTime.toString + ",")
 
-    println("   -- Meta Data Extraction Time:" + (TotalTime/1000.0).toString )
-    println("   -- Number of Instances:" +  metadata.nr_instances)
-    println("   -- Number of Features :" + metadata.nr_features)
-    println("   -- Number of Classess :" + metadata.nr_classes)
-    println("   -- Number of Categorical Features: :" + metadata.nr_categorical_features)
-    println("   -- Number of Numerical Features: :" + metadata.nr_numerical_features)
-    println("   -- Number of Missing Values: :" + metadata.missing_val)
-    println("--------------------------------------------------------------------------------")
+    println("(Step Time:" + (TotalTime/1000.0).toString + " Sec.)" )
+    println("   -- Number of Instances:" +  metadata.nr_instances + " (Time: "+((endtime_countInstances - starttime_countInstances)/1000.0).toString+" sec.)")
+    println("   -- Number of Features :" + metadata.nr_features + " (Time: "+((endtime_countFeatures - starttime_countFeatures)/1000.0).toString+" sec.)")
+    println("   -- Number of Classess :" + metadata.nr_classes + " Max Probabitilty:" + fm4d.format(metadata.max_prob) + "%, Min Probability:" + fm4d.format(metadata.min_prob) + "% (Time: "+((endtime_classess - starttime_classess)/1000.0).toString+" sec.)")
+    println("   -- Number of Categorical Features: :" + metadata.nr_categorical_features + ", Number of Numerical Features: " + metadata.nr_numerical_features + " (Time: "+((endtime_CountFeaturesTypet - starttime_CountFeaturesTypet)/1000.0).toString+" sec.)")
+    println("   -- Number of Missing Values: :" + metadata.missing_val + " (Time: "+((endtime_MissingValueCount - starttime_MissingValueCount)/1000.0).toString+" sec.)")
+    println("   -- Numerical Feature Statistics Time:" + (NumericalFeatureStatt2 - NumericalFeatureStatt1)/1000.0 + " sec")
+    println("   -- Categorical Features Statistics Time:" + (CategoricalFeatureStatt2 - CategoricalFeatureStatt1)/1000.0 + " sec")
+    logger.printLine()
+
+    logger.logOutput("(Step Time:" + (TotalTime/1000.0).toString + " Sec.)\n" )
+    logger.logOutput("   -- Number of Instances:" +  metadata.nr_instances + " (Time: "+((endtime_countInstances - starttime_countInstances)/1000.0).toString+" sec.)\n")
+    logger.logOutput("   -- Number of Features :" + metadata.nr_features + " (Time: "+((endtime_countFeatures - starttime_countFeatures)/1000.0).toString+" sec.)\n")
+    logger.logOutput("   -- Number of Classess :" + metadata.nr_classes + " Max Probabitilty:" + fm4d.format(metadata.max_prob) + "%, Min Probability:" + fm4d.format(metadata.min_prob) + "% (Time: "+((endtime_classess - starttime_classess)/1000.0).toString+" sec.)\n")
+    logger.logOutput("   -- Number of Categorical Features: :" + metadata.nr_categorical_features + ", Number of Numerical Features: " + metadata.nr_numerical_features + " (Time: "+((endtime_CountFeaturesTypet - starttime_CountFeaturesTypet)/1000.0).toString+" sec.)\n")
+    logger.logOutput("   -- Number of Missing Values: :" + metadata.missing_val + " (Time: "+((endtime_MissingValueCount - starttime_MissingValueCount)/1000.0).toString+" sec.)\n")
+    logger.logOutput("   -- Numerical Feature Statistics Time:" + (NumericalFeatureStatt2 - NumericalFeatureStatt1)/1000.0 + " sec\n")
+    logger.logOutput("   -- Categorical Features Statistics Time:" + (CategoricalFeatureStatt2 - CategoricalFeatureStatt1)/1000.0 + " sec\n")
+    logger.logLine()
 
     //_metadata = metadata
     return metadata
@@ -349,7 +372,7 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
       .setOutputCol("features")
     val mydataset = assembler.transform(df).select(label, "features")
     val indexingt2 =  new java.util.Date().getTime
-    logger.logTime("Indexing Data:" + (indexingt2 - indexingt1) + ",")
+    //logger.logTime("Indexing Data:" + (indexingt2 - indexingt1) + ",")
 
     // standard scalar
     val scallingt1 =  new java.util.Date().getTime
@@ -370,7 +393,7 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
     val df_MinMaxScaled = scalerMinMaxModel.transform(mydataset).select(label, "features_Standarized")
     val Array(trainingData_MinMaxScaled, testData_MinMaxScaled) = df_MinMaxScaled.randomSplit(Array(0.8, 0.2))
     val scallingt2 =  new java.util.Date().getTime
-    logger.logTime("Scalling Data:" + (scallingt2 - scallingt1) + ",")
+    //logger.logTime("Scalling Data:" + (scallingt2 - scallingt1) + ",")
 
 
     // evaluator
@@ -379,7 +402,7 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
       .setPredictionCol("prediction")
       .setMetricName("accuracy")
 
-    logger.logTime("Handling Missing Value:" + missingvalueTime + ",")
+    //logger.logTime("Handling Missing Value:" + missingvalueTime + ",")
     println("Handling Missing Value:" + missingvalueTime + ",")
 
 

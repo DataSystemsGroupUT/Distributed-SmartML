@@ -113,7 +113,7 @@ class DataLoader (spark:SparkSession, ds: Int,  Path : String, logger: Logger, P
     * @return Dataframe of the requested dataset
     */
   def getData():DataFrame = {
-    logger.logTime(datasets(ds) + ",")
+    //logger.logTime(datasets(ds) + ",")
     val starttime =  new java.util.Date().getTime
 
     // Read Data
@@ -1081,7 +1081,7 @@ class DataLoader (spark:SparkSession, ds: Int,  Path : String, logger: Logger, P
 
     val endtime =  new java.util.Date().getTime
     val TotalTime = endtime - starttime
-    logger.logTime( "Loading Data:" + TotalTime + ",")
+    //logger.logTime( "- Loading Data:" + TotalTime/1000.0 + " sec.\n")
     //println( "Loading Data:" + TotalTime + ",")
 
     rawdata
