@@ -194,7 +194,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
   @Since("2.3.0")
   def setmaxTime(value: Long): this.type = set(maxTime, value)
 
-  var StartingTime:Date = new Date()
+  var StartingTime:Date = null
 
   def IsTimeOut(): Boolean =
   {
@@ -235,38 +235,8 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       val schema = dataset.schema
       transformSchema(schema, logging = true)
 
-
-      // split the data to training and validation
-      //val Array(trainingDataset, validationDataset) = dataset.randomSplit(Array(0.80, 0.20), $(seed))
-
-      //val pwLog = new PrintWriter(new File(logpath ))
       val res = hyberband(dataset)
-      //pwLog.close()
 
-
-      /*
-      var bestParam_ :ParamMap = null
-      var bestModel_ :Model[_] = null
-      var metric_ :Double = 0.0
-
-      res.foreach { case (p, (a, m)) =>
-        val metric = eval.evaluate(m.transform(validationDataset))
-        println(" === Accuracy:" + metric)
-          if(metric > metric_){
-            bestParam_ = p
-            bestModel_ = m
-            metric_ = metric
-
-
-            this.bestParam = bestParam_
-            this.bestModel = bestModel_
-            this.bestmetric = metric_
-
-
-          }
-
-      }
-      */
         // get the best parameters returned by the Hyperband
       var bestParam:ParamMap = ListMap(res.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).keys.head
 
@@ -277,11 +247,9 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       //val metric = eval.evaluate(bestModel.transform(validationDataset, bestParam))
       val metric:Double = ListMap(res.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).values.head._1
 
-
       this.bestParam = bestParam
       this.bestModel = bestModel
       this.bestmetric = metric
-
 
       // return Hyperband mode (with: best model, best parameters and its evaluation metric)
       return new HyperbandModel(uid, bestModel, Array(metric))
@@ -300,15 +268,10 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     */
   def hyberband (dataset: Dataset[_]  ):ListMap[ParamMap, (Double,Model[_])] = {
 
-    //println("start Hyper band with eta = " + $(eta) + ", and max resource = " + $(maxResource) + "%")
-    //println("--------------------------------------------------------------------------------")
     // properities of hyperband
     val eeta = $(eta)
     val max_Resource = $(maxResource)
     val shouldLogtoFile = $(logToFile)
-
-    //if(shouldLogtoFile)
-    //  pwLog.write("---------------------Start Hyperband--------------------------------------\n")
 
     // List of parameters for each sh iteration
     var currentResult = ListMap[ParamMap, (Double,Model[_])]()
@@ -318,32 +281,22 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
     // number of unique executions of Successive Halving (minus one)
     var s_max = math.round(logeta(max_Resource))
-    //println("Number of Successive Halving Sessions = " + (s_max + 1))
 
     //Budget (without reuse) per execution of Succesive Halving (n,r)
     var B = (s_max+1) * max_Resource
 
-    //if(shouldLogtoFile) {
-    //pwLog.write("S max = " + s_max + "\n")
-    //pwLog.write("--------------------------------------------------------------------------\n")
-    //}
-
     var firstSH = true
     // loop (number of successive halving, with different number of hyper-parameters configurations)
     // incearsing number of configuration mean decreasing the resource per each configuration
-    for( s <- s_max  to 0 by -1) {
+    for( s <- s_max-1 to 0 by -1) {
       if (!IsTimeOut()) {
 
         //initial number of configurations
         var tmp = math.ceil((B / max_Resource / (s + 1)))
         var n = math.round(tmp * math.pow(eeta, s))
-        //println("   - Number of Hyperparameter values to check =" + n)
 
         //initial number of resources to run configurations for
         var r = max_Resource * math.pow(eeta, (-s))
-        //println("   - Initial resource percentage to check =" + r)
-        //filelog.logException("=================================================================================================\n")
-        //filelog.logException("     -- Successive Halving Session:" + s + " , Starting with " + formatter.format(r) + " of data and "  + n +" Models to train\n")
         println("     -- Successive Halving Session:" + s + " , Starting with " + formatter.format(r) + "% of data and "  + n +" Models to train")
         filelog.logOutput("     -- Successive Halving Session:" + s + " , Starting with " + formatter.format(r) + "% of data and "  + n +" Models to train\n")
 
@@ -373,18 +326,33 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       }
       else
         {
-          println("     --Time out @ Main Hyperband loop")
+          //currentResult.foreach( e => println(e._2._1))
           filelog.logOutput("     --Time out @ Main Hyperband loop\n")
           return currentResult
         }
     }
+
     currentResult
   }
 
 
+  def getBestAcc( lst:Map[Int, (Double,Model[_],ParamMap)]):(Int, (Double,Model[_],ParamMap)) = {
+    var curracc = 0.0
+    var currind = 1
+    var currentResult = ListMap[Int, (Double,Model[_],ParamMap)]()
+    for( i <- lst.keys)
+      {
+        if( lst(i)._1 > curracc )
+          {
+            curracc = lst(i)._1
+            currind = i
+          }
+      }
+    return ( currind , lst(currind) )
+  }
 
 
-  /**
+  /*
     * This function run successive halving algorithm for spacific resources on spacific iteration
     * @param dataset The input dataset on which we will run the hyperband
     * @param n number of hyperparameters configuration
@@ -397,8 +365,6 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     // properities
     val shouldLogtoFile = $(logToFile)
     val eeta:Double = $(eta)
-    //val epm = $(estimatorParamMaps)
-    //val rand = scala.util.Random
 
 /*
 
@@ -431,38 +397,40 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
     var SelectedParamsMapIndexed =  Map[Int,ParamMap]()
     SelectedParamsMapIndexed = ClassifiersMgr.getRandomParametersIndexed( $(ClassifierName), n)
-
     var s12 = ""
     for ( ps <- SelectedParamsMapIndexed) {
       for (p <- ps._2.toSeq) {
         s12 = p.param.name + ":" + p.value + "," + s12
-        //println(s12)
-        //filelog.logException(p.param.name + ":" + p.value  + "\n")
-      }
 
-      //filelog.logException(" -->>" + s12 + "\n")
+      }
       s12 = ""
     }
 
     // list to save hyper parameter configuration during the sh iteration
     var currentResult = ListMap[Int, (Double,Model[_],ParamMap)]()
+    var BestResult = ListMap[Int, (Double,Model[_],ParamMap)]()
     var currentResult_ = ListMap[Int, ParamMap]()
 
+    var counter = 0
     for ( i <-  0 to (s ).toInt)
     {
-      //println("       -- Number of items:" + currentResult.size )
+
+      // if no time out
       if( !IsTimeOut()) {
-        //Run each of the n_i configs for r_i iterations and keep best n_i/eta
+        //Run each of the n_i configs for r_i iterations and keep best n_i/eta (loop)
         var n_i = n * math.pow(eeta, (-i))
         var r_i: Double = r * math.pow(eeta, (i))
-        //filelog.logException("-- Loop Number " + i + " , check " + n_i + "Hyperparameter values on " + formatter.format(r_i) + "% of the data\n")
         print("       -- Loop Number " + i + " , Train " + n_i + " Models on " + formatter.format(r_i) + "% of the data")
         filelog.logOutput("       -- Loop Number " + i + " , Train " + n_i + " Models on " + formatter.format(r_i) + "% of the data")
-        //var resultParam =
-          if (i == 0) {
+
+        //if this is the first loop
+        if (i == 0) {
             var tmp = learn(dataset, SelectedParamsMapIndexed, r_i)
-            if( tmp.size > 0)
+            if( tmp != null) {
+              counter = counter + 1
+              BestResult += ( counter -> getBestAcc(tmp)._2)
               currentResult = tmp
+            }
             else {
               println("      -- learn return null at first loop in this sh")
               filelog.logOutput("      -- learn return null at first loop in this sh\n")
@@ -470,34 +438,51 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
           }
           else {
-            for( u <- 0 until n_i.toInt)
+          // not the first loop (loop to get best param)
+          currentResult_ = currentResult_.empty
+          for( u <- 0 until n_i.toInt)
               {
                 val ind = currentResult.maxBy{ case (key, value) => value._1 }._1
                 currentResult_ += (ind -> currentResult(ind)._3)
                 currentResult -= ind
               }
+            //println("Number of parm:" +currentResult_.size)
             var tmp = learn(dataset, currentResult_, r_i)
 
-           if(  tmp.size > 0)
-              currentResult = tmp
+           if(  tmp != null) {
+             currentResult = tmp
+             counter = counter + 1
+             BestResult += ( counter -> getBestAcc(tmp)._2)
+           }
             else {
               println("       --learn return null at this loop and we have:" + currentResult.size + " items in the list")
               filelog.logOutput("       --learn return null at this loop and we have:" + currentResult.size + " items in the list\n")
            }
            }
       }
-      else
-      {
+      // time out
+      else {
         println("       -- Time out @ SH")
         filelog.logOutput("       -- Time out @ SH\n")
         if(currentResult.size > 0 ) {
-          println("       --> best accuracy (after time out) in this sh:" + fm4d.format( 100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1 ) + "%")
-          filelog.logOutput("       --> best accuracy (after time out) in this sh:" + fm4d.format(100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1) + "%\n" )
+          //println("3")
+          //for (elem <- BestResult) {println(elem._2._1)}
 
-          val ind = currentResult.maxBy{ case (key, value) => value._1 }._1
-          val res = currentResult.filterKeys( k => k == ind)
-          return res//ListMap(res._3 -> (res._1 , res._2))
-          //return ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1)
+
+          //println("1- Time our with best accuracy for each loop:")
+          //BestResult.foreach( e=> println(e._2._1))
+
+          val ind = BestResult.maxBy{ case (key, value) => value._1 }._1 //currentResult.maxBy{ case (key, value) => value._1 }._1
+          val res = BestResult.filterKeys( k => k == ind) //currentResult.filterKeys( k => k == ind)
+
+          println("       --> best accuracy (after time out) in this sh:" + fm4d.format( 100 * res(ind)._1 ) + "%")
+          filelog.logOutput("       --> best accuracy (after time out) in this sh:" + fm4d.format(100 * res(ind)._1 ) + "%\n" )
+
+          //println("       --> best accuracy (after time out) in this sh:" + fm4d.format( 100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1 ) + "%")
+          //filelog.logOutput("       --> best accuracy (after time out) in this sh:" + fm4d.format(100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1) + "%\n" )
+
+
+          return res
         }
         else
           null
@@ -506,23 +491,28 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     }
     // return best hyper parameters for this SH run
     if(currentResult.size > 0 ) {
-      println("       -->> best accuracy for this session:" + fm4d.format( 100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1  )) + "%"
-      filelog.logOutput("       -->> best accuracy for this session:" + fm4d.format( 100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1) + "%\n" )
+      //println("4")
+      //for (elem <- BestResult) {println(elem._2._1)}
 
-      val ind = currentResult.maxBy{ case (key, value) => value._1 }._1
-      val res = currentResult.filterKeys( k => k == ind)
-      return res//ListMap(res._3 -> (res._1 , res._2.asInstanceOf[Model[_]]))
 
-      //return ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1)
+      val ind = BestResult.maxBy{ case (key, value) => value._1 }._1   // currentResult.maxBy{ case (key, value) => value._1 }._1
+      val res = BestResult.filterKeys( k => k == ind)  // currentResult.filterKeys( k => k == ind)
+
+      println("       -->> best accuracy for this session:" + fm4d.format( 100 * res(ind)._1 ) + "%")
+      filelog.logOutput("       -->> best accuracy for this session:" + fm4d.format( 100 * res(ind)._1 ) + "%\n" )
+
+
+      //println("2- session comleted with best accuracy for each loop:")
+      //BestResult.foreach( e=> println(e._2._1))
+
+
+      return res
 
     }
     else null
 
   }
 
-  /*
-
-  * */
 
   /**
     * this function ML algorithm training for a set of hyper parameter configuration, the training could be parallelized (if the cluster can has free nodes)
@@ -550,9 +540,6 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       val Array(partation, restofdata) =
         trainingDataset.randomSplit(Array(r / 100, 1 - (r / 100)), $(seed))
 
-
-
-
       // cache data
       trainingDataset.cache()
       validationDataset.cache()
@@ -562,17 +549,11 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
 
       // Fit models in a Future for training in parallel
-      //val metricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
         val metricFutures = param.map { case (paramIndex ,paramMap ) =>
         Future[Double] {
           if( ! IsTimeOut()) {
-            //println(" =====> Remaining time before ML:" + getRemainingTime())
             val model = est.fit(partation, paramMap).asInstanceOf[Model[_]]
             val metric = eval.evaluate(model.transform(validationDataset, paramMap))
-            //println(", Accuracy:" + metric)
-            //pw.write(" Parameters:" + paramMap.toSeq.toString() + ", Metric:" + metric + "\n")
-            //println("-- -- Metric:" + metric)
-            //println("paramMap:" + paramMap.toString())
 
             if ($(ClassifierName) == "RandomForestClassifier")
               iterResultMap += (paramIndex -> (metric, model.asInstanceOf[RandomForestClassificationModel], paramMap))
@@ -593,11 +574,8 @@ class Hyperband (@Since("1.5.0") override val uid: String)
             else
               iterResultMap += (paramIndex -> (metric, model.asInstanceOf[QDAModel], paramMap))
 
-            //println("     - Accuracy:" + metric )
-            //filelog.logException("Accuracy:" + metric.toString + " ,Parameters:" + paramMap.toSeq.mkString + "\n")
-            metric
+              metric
           }else {
-            //println("===>>>Time out in future")
             0.0
           }
 
@@ -607,45 +585,47 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
       import scala.concurrent.duration._
       val duration = Duration(getRemainingTime(), MILLISECONDS)
-
       // Wait for all metrics to be calculated
       try {
-        //println(" =====> Remaining time before 2 ML:" + getRemainingTime())
-        val metrics = metricFutures.map(ThreadUtils.awaitResult(_, duration)) //Duration.Inf))
-        //println(" =====> Remaining time after ML:" + getRemainingTime())
+        val metrics = metricFutures.map(ThreadUtils.awaitResult(_, duration))
       }catch
        {
           case ex:Exception => println("      --TimeOut:==>" +ex.getMessage)
-           println(ex.getStackTrace())
        }
 
-      //println(">>>>> Count found" + iterResultMap.size)
-      var sortedIterResultMap =
-        if (eval.isLargerBetter)
-          ListMap(iterResultMap.toSeq.sortWith( (x1,x2) => x1._2._1.toString + x1._1.toString > x2._2._1.toString + x2._1.toString): _*)
-          //ListMap(iterResultMap.toSeq.sortWith( (x1,x2) => x1._2._1 + x1._1.toSeq(2).value.toString + x1._1.toSeq(1).value.toString + x1._1.toSeq(0).value.toString >
-           //                                        x2._2._1 + x2._1.toSeq(2).value.toString + x2._1.toSeq(1).value.toString + x2._1.toSeq(0).value.toString): _*)
-          //ListMap(iterResultMap.toSeq.sortWith(_._2._1 > _._2._1): _*)
-        else
-          ListMap(iterResultMap.toSeq.sortWith(_._2._1 < _._2._1): _*)
-      // Unpersist training & validation set once all metrics have been produced
-      trainingDataset.unpersist()
-      validationDataset.unpersist()
 
-      val Endtime1 = new java.util.Date().getTime
-      val TotalTime1 = Endtime1 - starttime1
-      print(" , Time(" + (TotalTime1/1000.0).toString + ") ")
-      filelog.logOutput(" , Time(" + (TotalTime1/1000.0).toString + ") ")
+       var sortedIterResultMap =
+       if(iterResultMap.size > 0 ) {
+         if (eval.isLargerBetter)
+           ListMap(iterResultMap.toSeq.sortWith((x1, x2) => x1._2._1.toString + x1._1.toString > x2._2._1.toString + x2._1.toString): _*)
+         else
+           ListMap(iterResultMap.toSeq.sortWith(_._2._1 < _._2._1): _*)
+       } else
+       null
 
-      println(" and Best Accuracy is: " +fm4d.format( 100 * sortedIterResultMap.head._2._1 ) + "%")
-      filelog.logOutput(" and Best Accuracy is: " + fm4d.format( 100 * sortedIterResultMap.head._2._1) + "%\n" )
+        // Unpersist training & validation set once all metrics have been produced
+        trainingDataset.unpersist()
+        validationDataset.unpersist()
 
-      sortedIterResultMap
+        val Endtime1 = new java.util.Date().getTime
+        val TotalTime1 = Endtime1 - starttime1
+        print(" , Time(" + (TotalTime1 / 1000.0).toString + ") ")
+        filelog.logOutput(" , Time(" + (TotalTime1 / 1000.0).toString + ") ")
+
+      if( sortedIterResultMap != null ) {
+        //println("list this loop accuracy:")
+        //sortedIterResultMap.foreach(e=> println(e._2._1))
+
+        println(" and Best Accuracy is: " + fm4d.format(100 * sortedIterResultMap.head._2._1) + "%")
+        filelog.logOutput(" and Best Accuracy is: " + fm4d.format(100 * sortedIterResultMap.head._2._1) + "%\n")
+      }
+        sortedIterResultMap
+
    }catch
       {
         case ex:Exception =>
           println("Exception (Hyperband - "+$(ClassifierName)+"- learn): " + ex.getMessage)
-          ex.printStackTrace()
+          //ex.printStackTrace()
           return null
       }
   }

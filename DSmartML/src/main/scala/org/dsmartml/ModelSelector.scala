@@ -32,7 +32,7 @@ class ModelSelector (spark:SparkSession,
                      eta:Int = 3,
                      MaxRandomSearchParam:Int = 20,
                      maxResourcePercentage:Int = 100,
-                     Parallelism:Int = 2,
+                     Parallelism:Int = 3,
                      seed:Long=1234 ,
                      ConvertToVecAssembly:Boolean = true,
                      ScaleData:Boolean = true  ,
@@ -45,6 +45,7 @@ class ModelSelector (spark:SparkSession,
 
 
   var StartingTime: Date = new Date()
+
   val fm2d = new DecimalFormat("###.##")
   val fm4d = new DecimalFormat("###.####")
 
@@ -117,6 +118,7 @@ class ModelSelector (spark:SparkSession,
     */
 
     try {
+      StartingTime = new Date()
       x = HyperParametersOpt(mydataset, selectedClassifiers, kbmgr, ClassifierMgr, HP_MaxTime.toInt)
     }
     catch {
@@ -230,8 +232,11 @@ class ModelSelector (spark:SparkSession,
 
   def HyperParametersOpt(mydataset:DataFrame , selectedClassifiers:List[Int] , kbmgr:KBManager ,ClassifierMgr:ClassifiersManager, t:Int ): (String, ( Model[_] , ParamMap , Double)) = {
 
+    // starting time for optimization
     val StartTime = new java.util.Date().getTime
-    val Start = new java.util.Date()
+
+
+    //val Start = new java.util.Date()
     // output
     var modelname: String = ""
     var bestmodel :Model[_] = null
@@ -253,7 +258,7 @@ class ModelSelector (spark:SparkSession,
       logger.logOutput("3 - Hyper-parameters Optimization using Random Search\n")
     }
 
-    StartingTime= new Date()
+    //StartingTime= new Date()
     for( i <- selectedClassifiers) {
 
       if ((kbmgr._metadata.nr_classes == 2 && Array(4, 6).contains(i))
@@ -265,7 +270,7 @@ class ModelSelector (spark:SparkSession,
 
         try {
           var classifier = ClassifiersManager.classifiersLsit(i) // ClassifiersManager.classifiersOrderLsit(i.toInt)
-          var result = getAlgorithmBestModel(trainingData_MinMaxScaled, ClassifierMgr, classifier, Start)
+          var result = getAlgorithmBestModel(trainingData_MinMaxScaled, ClassifierMgr, classifier, StartingTime)
           val starttime1 = new java.util.Date().getTime
           if(result != null)
           {
@@ -450,7 +455,8 @@ class ModelSelector (spark:SparkSession,
     // return best Model with its parameters and accuracy
     if (selectedModelMap.head != null) {
       val Endtime = new java.util.Date().getTime
-      val TotalTime1 = Endtime - StartTime
+
+      val TotalTime1 = Endtime - StartingTime.getTime
       logger.printLine()
       logger.logLine()
       println("  =>Result:")
