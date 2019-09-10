@@ -72,7 +72,7 @@ object App_GetBestModel {
       if (j == 1 || j == 2 ) {
         //for (ti <- Array(20,40,60,80,100) ){
         try {
-          var mselector = new ModelSelector(spark, logger, eta = 3, maxResourcePercentage = 100, HP_MaxTime = t, Parallelism = p, TryNClassifier = 6, HPOptimizer = j)
+          var mselector = new ModelSelector(spark, logger, eta = 5, maxResourcePercentage = 100, HP_MaxTime = t, Parallelism = p, TryNClassifier = 6, HPOptimizer = j)
           var res = mselector.getBestModel(rawdata)
         }
         catch {
