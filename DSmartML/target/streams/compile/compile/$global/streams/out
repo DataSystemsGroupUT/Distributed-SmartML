@@ -1,0 +1,13 @@
+[0m[[0m[31merror[0m] [0m[0m/home/eissa/mycode/DSmartML/src/main/scala/org/dsmartml/DataLoader.scala:1102:134: not found: value df[0m
+[0m[[0m[31merror[0m] [0m[0m      val indexer2 = new StringIndexer().setInputCol("Primary_Offense_Description").setOutputCol("_Primary_Offense_Description").fit(df)[0m
+[0m[[0m[31merror[0m] [0m[0m                                                                                                                                     ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/eissa/mycode/DSmartML/src/main/scala/org/dsmartml/DataLoader.scala:1108:92: not found: value df[0m
+[0m[[0m[31merror[0m] [0m[0m      val indexer4 = new StringIndexer().setInputCol("Sector").setOutputCol("_Sector").fit(df)[0m
+[0m[[0m[31merror[0m] [0m[0m                                                                                           ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/eissa/mycode/DSmartML/src/main/scala/org/dsmartml/DataLoader.scala:1111:88: not found: value df[0m
+[0m[[0m[31merror[0m] [0m[0m      val indexer5 = new StringIndexer().setInputCol("Beat").setOutputCol("_Beat").fit(df)[0m
+[0m[[0m[31merror[0m] [0m[0m                                                                                       ^[0m
+[0m[[0m[31merror[0m] [0m[0m/home/eissa/mycode/DSmartML/src/main/scala/org/dsmartml/DataLoader.scala:1114:92: not found: value df[0m
+[0m[[0m[31merror[0m] [0m[0m      val indexer6 = new StringIndexer().setInputCol("Neighborhood").setOutputCol("y").fit(df)[0m
+[0m[[0m[31merror[0m] [0m[0m                                                                                           ^[0m
+[0m[[0m[31merror[0m] [0m[0mfour errors found[0m

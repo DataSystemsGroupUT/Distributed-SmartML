@@ -1,15 +1,12 @@
 //package org.apache.spark.ml.tuning
 package org.dsmartml
 
-import java.nio.file.StandardCopyOption
 import java.text.DecimalFormat
 import java.util.Date
-
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.classification._
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.tuning.Hyperband
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.dsmartml.knowledgeBase.KBManager
 
@@ -26,29 +23,33 @@ import org.dsmartml.knowledgeBase.KBManager
   * @Date 22/3/2019
   */
 class ModelSelector (spark:SparkSession,
-                     logger:Logger,
+                     logpath:String,
                      featureCol:String = "features" ,
                      TargetCol:String = "y" ,
-                     eta:Int = 3,
+                     eta:Int = 5,
                      MaxRandomSearchParam:Int = 20,
                      maxResourcePercentage:Int = 100,
                      Parallelism:Int = 3,
-                     seed:Long=1234 ,
+                     seed:Int=1234 ,
                      ConvertToVecAssembly:Boolean = true,
                      ScaleData:Boolean = true  ,
-                     TryNClassifier:Int = 2 ,
+                     TryNClassifier:Int = 6 ,
                      HPOptimizer:Int = 2,
-                     HP_MaxTime:Long = 100000) {
+                     var HP_MaxTime:Long = 100000) {
 
 
 
 
 
   var StartingTime: Date = new Date()
-
   val fm2d = new DecimalFormat("###.##")
   val fm4d = new DecimalFormat("###.####")
+  var logger = new Logger(logpath)
 
+  /**
+    * check if timeout or not
+    * @return
+    */
   def IsTimeOut(): Boolean = {
     if (getRemainingTime() == 0)
       return true
@@ -56,6 +57,10 @@ class ModelSelector (spark:SparkSession,
       return false
   }
 
+  /**
+    * calculate remaining time
+    * @return
+    */
   def getRemainingTime(): Long = {
     var rem: Long = (HP_MaxTime * 1000) - (new Date().getTime - StartingTime.getTime())
     if (rem < 0)
@@ -71,8 +76,8 @@ class ModelSelector (spark:SparkSession,
     */
   def getBestModel(df:DataFrame ): (String, ( Model[_] , ParamMap , Double)) = {
 
-    logger.printHeader(HPOptimizer, HP_MaxTime,Parallelism,eta, maxResourcePercentage,MaxRandomSearchParam)
-    logger.logHeader(HPOptimizer, HP_MaxTime,Parallelism,eta, maxResourcePercentage,MaxRandomSearchParam)
+    logger.printHeader(HPOptimizer, HP_MaxTime, Parallelism, eta, maxResourcePercentage, MaxRandomSearchParam,seed)
+    logger.logHeader(HPOptimizer, HP_MaxTime, Parallelism, eta, maxResourcePercentage, MaxRandomSearchParam,seed)
 
     // Creare Knowlegdebase Manager
     var kbmgr = new KBManager(spark, logger, TargetCol)
@@ -81,7 +86,7 @@ class ModelSelector (spark:SparkSession,
     val selectedClassifiers = kbmgr.PredictBestClassifiers(df)
 
     // Create Classifiers Manager
-    val ClassifierMgr = new ClassifiersManager(spark, kbmgr._metadata.nr_features, kbmgr._metadata.nr_classes)
+    val ClassifierMgr = new ClassifiersManager(spark, kbmgr._metadata.nr_features, kbmgr._metadata.nr_classes, seed = seed.toInt)
 
     //prepare dataset by converting to Vector Assembly & Scale it (if needed)
     var mydataset = df
@@ -103,8 +108,9 @@ class ModelSelector (spark:SparkSession,
     //else return null
     var x: (String, (Model[_], ParamMap, Double)) = null
 
+
     /*
-    for (time <- Array(50, 100, 200, 300, 400)) {
+    for (time <- Array(100, 200, 300, 400)) {
       try {
          x = HyperParametersOpt(mydataset, selectedClassifiers, kbmgr, ClassifierMgr, time)
       }
@@ -115,21 +121,36 @@ class ModelSelector (spark:SparkSession,
       }
 
     }
-    */
+  */
+    for (time <- Array(100,300,600,1800)) {
+      try {
 
-    try {
-      StartingTime = new Date()
-      x = HyperParametersOpt(mydataset, selectedClassifiers, kbmgr, ClassifierMgr, HP_MaxTime.toInt)
-    }
-    catch {
+        HP_MaxTime = time
+        //println("     === Time:" + HP_MaxTime)
+        StartingTime = new Date()
+        x = HyperParametersOpt(mydataset, selectedClassifiers, kbmgr, ClassifierMgr, time) //HP_MaxTime.toInt)
+      }
+    catch
+    {
       case ex: Exception => println(ex.getMessage)
         //                         logger.logOutput("Exception: " + ex.getMessage)
-        logger.close()
+        //logger.close()
     }
+      //logger.close()
+  }
+    logger.close()
     return x
   }
 
 
+  /**
+    *
+    * @param mydataset
+    * @param ClassifierMgr
+    * @param classifier
+    * @param StartingTime
+    * @return
+    */
   def getAlgorithmBestModel(
                              mydataset:DataFrame,
                              ClassifierMgr:ClassifiersManager,
@@ -156,7 +177,7 @@ class ModelSelector (spark:SparkSession,
         hb.setClassifierName(classifier)
         hb.setmaxTime(HP_MaxTime)
         hb.filelog = logger
-        hb.ClassifierParamsMapIndexed = ClassifierMgr.ClassifierParamsMapIndexed(classifier)
+        //hb.ClassifierParamsMapIndexed = ClassifierMgr.ClassifierParamsMapIndexed(classifier)
         hb.ClassifiersMgr = ClassifierMgr
         println("   -- Start Hyperband for " + classifier)
         val model = hb.fit(mydataset)
@@ -230,6 +251,15 @@ class ModelSelector (spark:SparkSession,
         return null
   }
 
+  /**
+    * Hyperparameter optimization
+    * @param mydataset
+    * @param selectedClassifiers
+    * @param kbmgr
+    * @param ClassifierMgr
+    * @param t
+    * @return
+    */
   def HyperParametersOpt(mydataset:DataFrame , selectedClassifiers:List[Int] , kbmgr:KBManager ,ClassifierMgr:ClassifiersManager, t:Int ): (String, ( Model[_] , ParamMap , Double)) = {
 
     // starting time for optimization
@@ -250,29 +280,32 @@ class ModelSelector (spark:SparkSession,
     var selectedModelMap = Map[String, ( Model[_] , ParamMap , Double)]()
 
     if(HPOptimizer == 1) {
-      println("3 - Hyper-parameters Optimization using Hyperband")
-      logger.logOutput("3 - Hyper-parameters Optimization using Hyperband\n")
+      println("3 - Hyper-parameters Optimization using Hyperband with Time budget (" + HP_MaxTime +") Second.")
+      logger.logOutput("3 - Hyper-parameters Optimization using Hyperband with Time budget (" + HP_MaxTime +") Second.\n")
     }
     else if(HPOptimizer == 2) {
-      println("3 - Hyper-parameters Optimization using Random Search")
-      logger.logOutput("3 - Hyper-parameters Optimization using Random Search\n")
+      println("3 - Hyper-parameters Optimization using Random Search with Time budget (" + HP_MaxTime +") Second.")
+      logger.logOutput("3 - Hyper-parameters Optimization using Random Search with Time budget (" + HP_MaxTime +") Second.\n")
     }
 
     //StartingTime= new Date()
     for( i <- selectedClassifiers) {
 
-      if ((kbmgr._metadata.nr_classes == 2 && Array(4, 6).contains(i))
-        ||
-        (kbmgr._metadata.nr_classes >= 2 && Array(0, 1, 2, 3).contains(i))
-        ||
-        (kbmgr._metadata.hasNegativeFeatures == false && i == 5)
+      if (  ((kbmgr._metadata.nr_classes == 2 && Array(4, 6).contains(i))
+                ||
+            (kbmgr._metadata.nr_classes >= 2 && Array(0, 1, 2, 3).contains(i))
+               ||
+            (kbmgr._metadata.hasNegativeFeatures == false && i == 5))
+              &&
+             !IsTimeOut()
       ) {
 
         try {
+          val starttime1 = new java.util.Date().getTime
           var classifier = ClassifiersManager.classifiersLsit(i) // ClassifiersManager.classifiersOrderLsit(i.toInt)
           var result = getAlgorithmBestModel(trainingData_MinMaxScaled, ClassifierMgr, classifier, StartingTime)
-          val starttime1 = new java.util.Date().getTime
-          if(result != null)
+
+          if(result != null  && result._1 != null && result._2 != null && result._3 != null)
           {
             var accuracy = result._2
             var selectedModel = result._3
@@ -359,8 +392,18 @@ class ModelSelector (spark:SparkSession,
 
           val Endtime1 = new java.util.Date().getTime
           val TotalTime1 = Endtime1 - starttime1
+          println("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "%")
+          logger.logOutput("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "%\n")
 
           }
+          else
+            {
+              val Endtime1 = new java.util.Date().getTime
+              val TotalTime1 = Endtime1 - starttime1
+              println("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: 0.00%")
+              logger.logOutput("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: 0.00%\n")
+
+            }
         } catch {
           case ex: Exception => println("-- Hyper-Param  Optimization Exception :" + ex.getMessage)
         }
@@ -453,9 +496,17 @@ class ModelSelector (spark:SparkSession,
     }
 
     // return best Model with its parameters and accuracy
-    if (selectedModelMap.head != null) {
-      val Endtime = new java.util.Date().getTime
+    if (selectedModelMap.size > 0) {
+      var plist = ""
+      for ( d <- selectedModelMap.head._2._2.toSeq.toList)
+      {
+        if(plist != "")
+          plist = d.param.name + ":" + d.value + "," + plist
+        else
+          plist = d.param.name + ":" + d.value
+      }
 
+      val Endtime = new java.util.Date().getTime
       val TotalTime1 = Endtime - StartingTime.getTime
       logger.printLine()
       logger.logLine()
@@ -463,27 +514,43 @@ class ModelSelector (spark:SparkSession,
       println("  |--Best Algorithm:" + selectedModelMap.head._1)
       println("  |--Accuracy:" + fm4d.format( 100 * selectedModelMap.head._2._3) + "%")
       println("  |--Total Time:" + (TotalTime1 / 1000.0).toString)
+      println("  |--Best Parameters:")
+      println("          " + plist)
 
       logger.logOutput("  =>Result:\n")
       logger.logOutput("  |--Best Algorithm:" + selectedModelMap.head._1 + "\n")
       logger.logOutput("  |--Accuracy:" + fm4d.format( 100 * selectedModelMap.head._2._3) + "%\n")
       logger.logOutput("  |--Total Time:" + (TotalTime1 / 1000.0).toString + "\n")
-
+      logger.logOutput("  |--Best Parameters:\n")
+      logger.logOutput("          " + plist + "\n")
       logger.printLine()
       logger.logLine()
-      var plist = ""
-        for ( d <- selectedModelMap.head._2._2.toSeq.toList)
-        {
-          if(plist != "")
-            plist = d.param.name + ":" + d.value + "," + plist
-          else
-            plist = d.param.name + ":" + d.value
-        }
+      //logger.close()
+
 
       //logger.logOutput("Max Time:" + t + ", Total Time:" +  (TotalTime1 / 1000.0).toString + ", eta:" + eta+  ", Accuracy:" + selectedModelMap.head._2._3 + ", Parameters:(" + plist  + ") \n"  )
       return selectedModelMap.head
     }
-    else return null
+    else
+      {
+        val Endtime = new java.util.Date().getTime
+        val TotalTime1 = Endtime - StartingTime.getTime
+        logger.printLine()
+        logger.logLine()
+        println("  =>Result:")
+        println("  |--Time out before train any model" )
+        println("  |--Total Time:" + (TotalTime1 / 1000.0).toString)
+
+        logger.logOutput("  =>Result:\n")
+        logger.logOutput("  |--Time out before train any model" )
+        logger.logOutput("  |--Total Time:" + (TotalTime1 / 1000.0).toString + "\n")
+
+        logger.printLine()
+        logger.logLine()
+        //logger.close()
+
+        return null
+      }
   }
 
 

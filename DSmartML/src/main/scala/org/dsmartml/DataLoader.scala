@@ -2,7 +2,7 @@
 package org.dsmartml
 import org.apache.spark.ml.feature.{MinMaxScaler, StringIndexer, VectorAssembler}
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{DataTypes, IntegerType, NumericType}
+import org.apache.spark.sql.types.{DataTypes, DoubleType, IntegerType, NumericType}
 import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
@@ -103,8 +103,24 @@ class DataLoader (spark:SparkSession, ds: Int,  Path : String, logger: Logger, P
     /*74*/  "74-pulsar_stars.csv" , //https://www.kaggle.com/pavanraj159/predicting-a-pulsar-star
     /*75*/ "75-ClassifyGestures.csv" , //https://www.kaggle.com/kyr7plus/emg-4/downloads/emg-4.zip/2
     /*76*/ "76-Handwriting.csv" , //https://www.kaggle.com/anupamwadhwa/handwriting-verification
-    /*77*/ "KB2.csv"
-
+    /*77*/ "KB2.csv" ,
+    /*78*/ "78-Seattle_Crime_Data_06-23-2019-4.csv" , //https://www.openml.org/d/41960 ,
+    /*79*/ "79-php89ntbG.csv" ,//https://www.openml.org/d/351
+    /*80*/ "80-file7b53746cbda2.csv" ,//https://www.openml.org/d/41147
+    /*81*/ "81-MiniBooNE.csv" ,  //https://www.openml.org/d/41150
+    /*82*/ "82-BayesianNetworkGenerator_optdigits.csv" , //https://www.openml.org/d/123
+    /*83*/ "83-BayesianNetworkGenerator_segment.csv" ,// https://www.openml.org/d/130
+    /*84*/ "84-BayesianNetworkGenerator_anneal.ORIG_small.csv" ,//https://www.openml.org/d/71
+    /*85*/ "85-BayesianNetworkGenerator_kr-vs-kp_small.csv", //https://www.openml.org/d/72
+    /*86*/ "86-BayesianNetworkGenerator_letter_small.csv" , //https://www.openml.org/d/74
+    /*87*/ "87-BayesianNetworkGenerator_labor_small.csv" , //https://www.openml.org/d/73
+    /*88*/ "88-BayesianNetworkGenerator_hypothyroid.csv" , //https://www.openml.org/d/144
+    /*89*/ "89-BayesianNetworkGenerator_mfeat-zernike.csv" , //https://www.openml.org/d/118
+    /*90*/ "90-BayesianNetworkGenerator_hepatitis.csv" , //https://www.openml.org/d/142
+    /*91*/ "91-BayesianNetworkGenerator_mfeat-fourier_small.csv" , //https://www.openml.org/d/78
+    /*92*/ "92-CovPokElec.csv" , //https://www.openml.org/d/149
+    /*93*/ "93-AirlinesCodrnaAdult.csv" , //https://www.openml.org/d/1240
+    /*94*/ "94-Dataset-Unicauca-Version2-87Atts.csv" //https://www.kaggle.com/jsrojas/ip-network-traffic-flows-labeled-with-87-apps
 
   )
 
@@ -1074,6 +1090,195 @@ class DataLoader (spark:SparkSession, ds: Int,  Path : String, logger: Logger, P
       rawdata = rawdata.drop("BestAlgorithm")
     }
 
+    if(ds == 78){
+      rawdata = rawdata.drop("Report_Number")
+      rawdata = rawdata.withColumn("_Occurred_Time" , col("Occurred_Time").cast(IntegerType))
+      rawdata = rawdata.withColumn("_Reported_Time" , col("Reported_Time").cast(IntegerType))
+      rawdata = rawdata.drop("Occurred_Time").drop("Reported_Time")
+
+      val indexer1 = new StringIndexer().setInputCol("Crime_Subcategory").setOutputCol("_Crime_Subcategory").fit(rawdata)
+      rawdata = indexer1.transform(rawdata).drop("Crime_Subcategory")
+
+      val indexer2 = new StringIndexer().setInputCol("Primary_Offense_Description").setOutputCol("_Primary_Offense_Description").fit(rawdata)
+      rawdata = indexer2.transform(rawdata).drop("Primary_Offense_Description")
+
+      val indexer3 = new StringIndexer().setInputCol("Precinct").setOutputCol("_Precinct").fit(rawdata)
+      rawdata = indexer3.transform(rawdata).drop("Precinct")
+
+      val indexer4 = new StringIndexer().setInputCol("Sector").setOutputCol("_Sector").fit(rawdata)
+      rawdata = indexer4.transform(rawdata).drop("Sector")
+
+      val indexer5 = new StringIndexer().setInputCol("Beat").setOutputCol("_Beat").fit(rawdata)
+      rawdata = indexer5.transform(rawdata).drop("Beat")
+
+      val indexer6 = new StringIndexer().setInputCol("Neighborhood").setOutputCol("y").fit(rawdata)
+      rawdata = indexer6.transform(rawdata).drop("Neighborhood")
+    }
+
+    if(ds == 79){
+
+    }
+
+    if(ds == 80){
+
+      for ( c <- rawdata.columns){
+        if( c != "class"){
+          rawdata = rawdata.withColumn( c , col(c).cast(DoubleType))
+        }
+      }
+      val map = rawdata.columns.map((_, "0")).toMap
+      rawdata = rawdata.na.fill(map).withColumnRenamed("class" , "y")
+
+    }
+
+    if(ds == 81){
+      rawdata = rawdata.withColumn("y" ,  when( col("signal").equalTo("True") , lit(1)).otherwise( lit(0) ))
+      rawdata = rawdata.drop("signal")
+    }
+
+    if(ds == 82){
+      for ( c <- rawdata.columns){
+        if( c != "class"){
+          //print("convert column:" + c + " to be:" +  "c_" + c )
+          val indexer = new StringIndexer().setInputCol(c).setOutputCol("c_" + c).fit(rawdata)
+          rawdata = indexer.transform(rawdata).drop(c)
+          //println(" --- Done")
+        }
+      }
+      rawdata = rawdata.withColumnRenamed( "class" , "y")
+    }
+
+    if(ds == 83){
+      for ( c <- rawdata.columns){
+        //if( c != "class"){
+        //print("convert column:" + c + " to be:" +  "c_" + c )
+        val indexer = new StringIndexer().setInputCol(c).setOutputCol("c_" + c).fit(rawdata)
+        rawdata = indexer.transform(rawdata).drop(c)
+        //println(" --- Done")
+        // }
+      }
+      rawdata = rawdata.withColumnRenamed( "c_class" , "y")
+    }
+
+    if(ds == 84){
+      for ( c <- rawdata.columns){
+        val indexer = new StringIndexer().setInputCol(c).setOutputCol("c_" + c).fit(rawdata)
+        rawdata = indexer.transform(rawdata).drop(c)
+      }
+      rawdata = rawdata.withColumnRenamed( "c_class" , "y")
+    }
+
+    if(ds == 85){
+      for ( c <- rawdata.columns){
+        //print("convert column:" + c + " to be:" +  "c_" + c )
+        val indexer = new StringIndexer().setInputCol(c).setOutputCol("c_" + c).fit(rawdata)
+        rawdata = indexer.transform(rawdata).drop(c)
+      }
+      rawdata = rawdata.withColumnRenamed( "c_class" , "y")
+    }
+
+    if(ds == 86){
+      for ( c <- rawdata.columns){
+        val indexer = new StringIndexer().setInputCol(c).setOutputCol("c_" + c).fit(rawdata)
+        rawdata = indexer.transform(rawdata).drop(c)
+      }
+      rawdata = rawdata.withColumnRenamed( "c_class" , "y")
+    }
+
+    if(ds == 87){
+      for ( c <- rawdata.columns){
+        val indexer = new StringIndexer().setInputCol(c).setOutputCol("c_" + c).fit(rawdata)
+        rawdata = indexer.transform(rawdata).drop(c)
+      }
+      rawdata = rawdata.withColumnRenamed( "c_class" , "y")
+    }
+
+    if(ds == 88){
+      for ( c <- rawdata.columns){
+        val indexer = new StringIndexer().setInputCol(c).setOutputCol("c_" + c).fit(rawdata)
+        rawdata = indexer.transform(rawdata).drop(c)
+      }
+      rawdata = rawdata.withColumnRenamed( "c_Class" , "y")
+    }
+
+    if(ds == 89){
+      for ( c <- rawdata.columns){
+        val indexer = new StringIndexer().setInputCol(c).setOutputCol("c_" + c).fit(rawdata)
+        rawdata = indexer.transform(rawdata).drop(c)
+      }
+      rawdata = rawdata.withColumnRenamed( "c_Class" , "y")
+    }
+
+    if(ds == 90){
+      for ( c <- rawdata.columns){
+        val indexer = new StringIndexer().setInputCol(c).setOutputCol("c_" + c).fit(rawdata)
+        rawdata = indexer.transform(rawdata).drop(c)
+      }
+      rawdata = rawdata.withColumnRenamed( "c_Class" , "y")
+    }
+
+    if(ds == 91){
+      for ( c <- rawdata.columns){
+        val indexer = new StringIndexer().setInputCol(c).setOutputCol("c_" + c).fit(rawdata)
+        rawdata = indexer.transform(rawdata).drop(c)
+      }
+      rawdata = rawdata.withColumnRenamed( "c_Class" , "y")
+    }
+
+    if(ds == 92){
+      rawdata = rawdata.withColumnRenamed( "class" , "y")
+    }
+
+    if(ds == 93){
+      val indexer1 = new StringIndexer().setInputCol("Airline").setOutputCol("c_Airline").fit(rawdata)
+      rawdata = indexer1.transform(rawdata).drop("Airline")
+
+      val indexer2 = new StringIndexer().setInputCol("AirportFrom").setOutputCol("c_AirportFrom").fit(rawdata)
+      rawdata = indexer2.transform(rawdata).drop("AirportFrom")
+
+      val indexer3 = new StringIndexer().setInputCol("AirportTo").setOutputCol("c_AirportTo").fit(rawdata)
+      rawdata = indexer3.transform(rawdata).drop("AirportTo")
+
+      val indexer4 = new StringIndexer().setInputCol("workclass").setOutputCol("c_workclass").fit(rawdata)
+      rawdata = indexer4.transform(rawdata).drop("workclass")
+
+      val indexer5 = new StringIndexer().setInputCol("education").setOutputCol("c_education").fit(rawdata)
+      rawdata = indexer5.transform(rawdata).drop("education")
+
+      val indexer6 = new StringIndexer().setInputCol("marital-status").setOutputCol("c_marital-status").fit(rawdata)
+      rawdata = indexer6.transform(rawdata).drop("marital-status")
+
+      val indexer7 = new StringIndexer().setInputCol("occupation").setOutputCol("c_occupation").fit(rawdata)
+      rawdata = indexer7.transform(rawdata).drop("occupation")
+
+      val indexer8 = new StringIndexer().setInputCol("relationship").setOutputCol("c_relationship").fit(rawdata)
+      rawdata = indexer8.transform(rawdata).drop("relationship")
+
+      val indexer9 = new StringIndexer().setInputCol("race").setOutputCol("c_race").fit(rawdata)
+      rawdata = indexer9.transform(rawdata).drop("race")
+
+      val indexer10 = new StringIndexer().setInputCol("sex").setOutputCol("c_sex").fit(rawdata)
+      rawdata = indexer10.transform(rawdata).drop("sex")
+
+      val indexer11 = new StringIndexer().setInputCol("native-country").setOutputCol("c_native-country").fit(rawdata)
+      rawdata = indexer11.transform(rawdata).drop("native-country")
+
+      rawdata = rawdata.withColumnRenamed( "Delay" , "y")
+    }
+
+    if(ds == 94){
+      rawdata = rawdata.drop("Flow.ID").drop("Source.IP").drop("Destination.IP").drop("Timestamp").drop("label").drop("L7Protocol")
+      rawdata = rawdata.withColumn("ProtocolName" ,  when( col("ProtocolName").notEqual("GOOGLE") && col("ProtocolName").notEqual("HTTP") && col("ProtocolName").notEqual("HTTP_PROXY") , "Other").otherwise( col("ProtocolName") ))
+      val indexer = new StringIndexer().setInputCol("ProtocolName").setOutputCol("y").fit(rawdata)
+      rawdata = indexer.transform(rawdata).drop("ProtocolName")
+      var TargetCol = "y"
+      rawdata = rawdata.drop("search_date_pacific").drop("class_id").withColumnRenamed("apply", TargetCol )
+
+      for ( c <- rawdata.columns){
+        rawdata = rawdata.withColumnRenamed ( c , c.replace("." , ""))
+      }
+      //rawdata = rawdata.withColumnRenamed( "Delay" , "y")
+    }
     //Persis it
     if(PresistData)
       rawdata.persist()
@@ -1095,7 +1300,8 @@ class DataLoader (spark:SparkSession, ds: Int,  Path : String, logger: Logger, P
     */
   def hasHeader(i:Int):Boolean = {
     var result =  false
-    var arr = Array(4,5,11,12,14,17,18,19,22,24,25,26,29,30,31,32,34,37,38,39,40,46,47,48,49,50,51,52,53,55,56,58,61,62,63,64,66,68,69,70,71,72,73,74,75,76,77)
+    var arr = Array(4,5,11,12,14,17,18,19,22,24,25,26,29,30,31,32,34,37,38,39,40,46,47,48,49,50,51,52,53,55,56,58,61,62,63,64,66,68,69,70,71,72,73,74,75,76,77,
+      78,80,81,82,83,84,85,86,87,88,89,90,91,92,93,94)
     if ( arr.contains(i))
       result = true
 
