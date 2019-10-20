@@ -1,5 +1,5 @@
 package org.apache.spark.ml.tuning
-//package org.dsmartml
+
 
 
 import java.text.DecimalFormat
@@ -23,10 +23,8 @@ import org.json4s.DefaultFormats
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.language.existentials
-
-//import org.dsmartml.Logger
-
 import scala.collection.immutable.ListMap
+import scala.collection.mutable.ListBuffer
 
 /**
   * Parameters for [[Hyperband]] and [[HyperbandModel]].
@@ -144,10 +142,12 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
   val fm2d = new DecimalFormat("###.##")
   val fm4d = new DecimalFormat("###.####")
-
   var filelog :Logger = null
   var ClassifierParamsMapIndexed =  Map[Int,ParamMap]()
   var ClassifiersMgr: ClassifiersManager = null
+  var StartingTime:Date = null
+  val formatter = java.text.NumberFormat.getInstance
+  formatter.setMaximumFractionDigits(2)
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("tvs"))
@@ -188,14 +188,16 @@ class Hyperband (@Since("1.5.0") override val uid: String)
   @Since("2.3.0")
   def setLogFilePath(value: String): this.type = set(logFilePath, value)
 
+  @Since("2.3.0")
   def setClassifierName(value: String): this.type = set(ClassifierName, value)
-
 
   @Since("2.3.0")
   def setmaxTime(value: Long): this.type = set(maxTime, value)
 
-  var StartingTime:Date = null
-
+  /**
+    * check if timeout or not
+    * @return
+    */
   def IsTimeOut(): Boolean =
   {
     if ( getRemainingTime() == 0)
@@ -204,6 +206,10 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       return false
   }
 
+  /**
+    * get remaining time
+    * @return
+    */
   def getRemainingTime(): Long =
   {
     var rem:Long = ($(maxTime) * 1000) - (new Date().getTime - StartingTime.getTime())
@@ -211,12 +217,6 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       rem = 0
     return rem
   }
-
-  val formatter = java.text.NumberFormat.getInstance
-  formatter.setMaximumFractionDigits(2)
-
-
-
 
   /**
     * This function Run Hyperband Algorithm on the data set to get best algorithm (best hyper parameters)
@@ -234,31 +234,31 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
       val schema = dataset.schema
       transformSchema(schema, logging = true)
-
       val res = hyberband(dataset)
 
+      if(res.size > 0) {
         // get the best parameters returned by the Hyperband
-      var bestParam:ParamMap = ListMap(res.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).keys.head
+        var bestParam: ParamMap = ListMap(res.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).keys.head
 
-      // train model using best parameters
-      //val bestModel = est.fit(trainingDataset, bestParam ).asInstanceOf[Model[_]]
-      val bestModel:Model[_] = ListMap(res.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).values.head._2
-      // evaluate the best Model
-      //val metric = eval.evaluate(bestModel.transform(validationDataset, bestParam))
-      val metric:Double = ListMap(res.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).values.head._1
+        // train model using best parameters
+        val bestModel: Model[_] = ListMap(res.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).values.head._2
 
-      this.bestParam = bestParam
-      this.bestModel = bestModel
-      this.bestmetric = metric
+        // evaluate the best Model
+        val metric: Double = ListMap(res.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).values.head._1
 
-      // return Hyperband mode (with: best model, best parameters and its evaluation metric)
-      return new HyperbandModel(uid, bestModel, Array(metric))
+        this.bestParam = bestParam
+        this.bestModel = bestModel
+        this.bestmetric = metric
+
+        // return Hyperband mode (with: best model, best parameters and its evaluation metric)
+        return new HyperbandModel(uid, bestModel, Array(metric))
+      }
+      else
+        return null
     }
     else
       return null
   }
-
-
 
 
   /**
@@ -288,6 +288,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     var firstSH = true
     // loop (number of successive halving, with different number of hyper-parameters configurations)
     // incearsing number of configuration mean decreasing the resource per each configuration
+    var time_out = false
     for( s <- s_max-1 to 0 by -1) {
       if (!IsTimeOut()) {
 
@@ -324,10 +325,12 @@ class Hyperband (@Since("1.5.0") override val uid: String)
             rsult.foreach { case (p, (a, m,pm)) => currentResult += (pm -> (a, m.asInstanceOf[QDAModel])) }
         }
       }
-      else
-        {
+      else {
           //currentResult.foreach( e => println(e._2._1))
+        if(!time_out) {
           filelog.logOutput("     --Time out @ Main Hyperband loop\n")
+          time_out = true
+        }
           return currentResult
         }
     }
@@ -335,7 +338,11 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     currentResult
   }
 
-
+  /**
+    * Get best Accuracy in a Map List
+    * @param lst
+    * @return
+    */
   def getBestAcc( lst:Map[Int, (Double,Model[_],ParamMap)]):(Int, (Double,Model[_],ParamMap)) = {
     var curracc = 0.0
     var currind = 1
@@ -366,7 +373,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     val shouldLogtoFile = $(logToFile)
     val eeta:Double = $(eta)
 
-/*
+    /*
 
     // select random n hyper parameters configuration
     val rand = new util.Random()
@@ -395,14 +402,16 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
 */
 
+    //println("===============================================================================")
     var SelectedParamsMapIndexed =  Map[Int,ParamMap]()
-    SelectedParamsMapIndexed = ClassifiersMgr.getRandomParametersIndexed( $(ClassifierName), n)
+    SelectedParamsMapIndexed = ClassifiersMgr.getNRandomParameters( $(ClassifierName), n , s)//ClassifiersMgr.getRandomParametersIndexed( $(ClassifierName), n)
     var s12 = ""
     for ( ps <- SelectedParamsMapIndexed) {
       for (p <- ps._2.toSeq) {
         s12 = p.param.name + ":" + p.value + "," + s12
 
       }
+      //println(s12)
       s12 = ""
     }
 
@@ -412,14 +421,17 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     var currentResult_ = ListMap[Int, ParamMap]()
 
     var counter = 0
+    var time_out = false
     for ( i <-  0 to (s ).toInt)
     {
-
       // if no time out
       if( !IsTimeOut()) {
         //Run each of the n_i configs for r_i iterations and keep best n_i/eta (loop)
         var n_i = n * math.pow(eeta, (-i))
         var r_i: Double = r * math.pow(eeta, (i))
+
+
+
         print("       -- Loop Number " + i + " , Train " + n_i + " Models on " + formatter.format(r_i) + "% of the data")
         filelog.logOutput("       -- Loop Number " + i + " , Train " + n_i + " Models on " + formatter.format(r_i) + "% of the data")
 
@@ -432,10 +444,9 @@ class Hyperband (@Since("1.5.0") override val uid: String)
               currentResult = tmp
             }
             else {
-              println("      -- learn return null at first loop in this sh")
-              filelog.logOutput("      -- learn return null at first loop in this sh\n")
+              //println("      -- learn return null at first loop in this sh")
+              //filelog.logOutput("      -- learn return null at first loop in this sh\n")
             }
-
           }
           else {
           // not the first loop (loop to get best param)
@@ -455,57 +466,35 @@ class Hyperband (@Since("1.5.0") override val uid: String)
              BestResult += ( counter -> getBestAcc(tmp)._2)
            }
             else {
-              println("       --learn return null at this loop and we have:" + currentResult.size + " items in the list")
-              filelog.logOutput("       --learn return null at this loop and we have:" + currentResult.size + " items in the list\n")
+              //println("       --learn return null at this loop and we have:" + currentResult.size + " items in the list")
+              //filelog.logOutput("       --learn return null at this loop and we have:" + currentResult.size + " items in the list\n")
            }
            }
       }
       // time out
       else {
-        println("       -- Time out @ SH")
-        filelog.logOutput("       -- Time out @ SH\n")
+        if(!time_out) {
+          println("       -- Time out @ SH")
+          filelog.logOutput("       -- Time out @ SH\n")
+          time_out = true
+        }
         if(currentResult.size > 0 ) {
-          //println("3")
-          //for (elem <- BestResult) {println(elem._2._1)}
-
-
-          //println("1- Time our with best accuracy for each loop:")
-          //BestResult.foreach( e=> println(e._2._1))
-
-          val ind = BestResult.maxBy{ case (key, value) => value._1 }._1 //currentResult.maxBy{ case (key, value) => value._1 }._1
-          val res = BestResult.filterKeys( k => k == ind) //currentResult.filterKeys( k => k == ind)
-
+          val ind = BestResult.maxBy{ case (key, value) => value._1 }._1
+          val res = BestResult.filterKeys( k => k == ind)
           println("       --> best accuracy (after time out) in this sh:" + fm4d.format( 100 * res(ind)._1 ) + "%")
           filelog.logOutput("       --> best accuracy (after time out) in this sh:" + fm4d.format(100 * res(ind)._1 ) + "%\n" )
-
-          //println("       --> best accuracy (after time out) in this sh:" + fm4d.format( 100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1 ) + "%")
-          //filelog.logOutput("       --> best accuracy (after time out) in this sh:" + fm4d.format(100 * ListMap(currentResult.toSeq.sortWith(_._2._1 > _._2._1): _*).take(1).toList(0)._2._1) + "%\n" )
-
-
           return res
         }
         else
           null
-
       }
     }
     // return best hyper parameters for this SH run
     if(currentResult.size > 0 ) {
-      //println("4")
-      //for (elem <- BestResult) {println(elem._2._1)}
-
-
-      val ind = BestResult.maxBy{ case (key, value) => value._1 }._1   // currentResult.maxBy{ case (key, value) => value._1 }._1
-      val res = BestResult.filterKeys( k => k == ind)  // currentResult.filterKeys( k => k == ind)
-
+      val ind = BestResult.maxBy{ case (key, value) => value._1 }._1
+      val res = BestResult.filterKeys( k => k == ind)
       println("       -->> best accuracy for this session:" + fm4d.format( 100 * res(ind)._1 ) + "%")
       filelog.logOutput("       -->> best accuracy for this session:" + fm4d.format( 100 * res(ind)._1 ) + "%\n" )
-
-
-      //println("2- session comleted with best accuracy for each loop:")
-      //BestResult.foreach( e=> println(e._2._1))
-
-
       return res
 
     }
@@ -527,7 +516,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       transformSchema(schema, logging = true)
       val est = $(estimator)
       val eval = $(evaluator)
-      val epm = param.values.toList
+      val epm = ListMap(param.toSeq.sortBy(_._1):_*).values.toList
       val shouldLogtoFile = $(logToFile)
       val starttime1 = new java.util.Date().getTime
 
@@ -574,23 +563,26 @@ class Hyperband (@Since("1.5.0") override val uid: String)
             else
               iterResultMap += (paramIndex -> (metric, model.asInstanceOf[QDAModel], paramMap))
 
-              metric
+            metric
           }else {
             0.0
           }
 
         }(executionContext)
       }
-
-
       import scala.concurrent.duration._
+
       val duration = Duration(getRemainingTime(), MILLISECONDS)
+
       // Wait for all metrics to be calculated
       try {
+        //println(" (remaining Time1:" + getRemainingTime() + ")")
         val metrics = metricFutures.map(ThreadUtils.awaitResult(_, duration))
       }catch
        {
-          case ex:Exception => println("      --TimeOut:==>" +ex.getMessage)
+
+          case ex:Exception => //println("(remaining Time2:" + getRemainingTime() +")")
+                               println("      -->(TimeOut...)" )//+ex.getMessage)
        }
 
 
@@ -613,9 +605,6 @@ class Hyperband (@Since("1.5.0") override val uid: String)
         filelog.logOutput(" , Time(" + (TotalTime1 / 1000.0).toString + ") ")
 
       if( sortedIterResultMap != null ) {
-        //println("list this loop accuracy:")
-        //sortedIterResultMap.foreach(e=> println(e._2._1))
-
         println(" and Best Accuracy is: " + fm4d.format(100 * sortedIterResultMap.head._2._1) + "%")
         filelog.logOutput(" and Best Accuracy is: " + fm4d.format(100 * sortedIterResultMap.head._2._1) + "%\n")
       }
@@ -625,7 +614,6 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       {
         case ex:Exception =>
           println("Exception (Hyperband - "+$(ClassifierName)+"- learn): " + ex.getMessage)
-          //ex.printStackTrace()
           return null
       }
   }
@@ -650,8 +638,6 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
   @Since("2.0.0")
   override def write: MLWriter = new Hyperband.HyperbandWriter(this)
-
-
 
 }
 

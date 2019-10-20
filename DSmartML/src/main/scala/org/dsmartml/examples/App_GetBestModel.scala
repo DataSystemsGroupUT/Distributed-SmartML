@@ -5,24 +5,25 @@ import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.DoubleType
 import org.dsmartml._
 
+import scala.collection.mutable.ListBuffer
+
 object App_GetBestModel {
 
 
   def main(args: Array[String]): Unit = {
 
 
-
     // Set File pathsd
     //*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*
     //1- Google Cloud -->
     //-------------------------------------------------
-    //var dataFolderPath = "gs://sparkstorage/datasets/"
-    //var logpath = "/home/eissa_abdelrahman5/"
+    var dataFolderPath = "gs://sparkstorage/datasets/"
+    var logpath = "/home/eissa_abdelrahman5/"
 
     //2- Local -->
     //-------------------------------------------------
-    var dataFolderPath = "/media/eissa/New/data/"
-    var logpath = "/media/eissa/New/data/"
+    //var dataFolderPath = "/media/eissa/New/data/"
+    //var logpath = "/media/eissa/New/data/"
 
     //3- Azure Cloud -->
     //-------------------------------------------------
@@ -46,8 +47,8 @@ object App_GetBestModel {
       .builder()
       .appName("Distributed Smart ML 1.0")
       //.config("packages" , "com.salesforce.transmogrifai:transmogrifai-core_2.11:0.5.3")
-      .config("spark.master", "local")
-      //.config("spark.master", "yarn")
+      //.config("spark.master", "local")
+      .config("spark.master", "yarn")
       //.config("spark.executor.memory", "15g")
       //.config("spark.driver.memory", "6g")
       //.config("spark.storage.memoryFraction" , "2")
@@ -72,7 +73,13 @@ object App_GetBestModel {
       if (j == 1 || j == 2 ) {
         //for (ti <- Array(20,40,60,80,100) ){
         try {
-          var mselector = new ModelSelector(spark, logger, eta = 5, maxResourcePercentage = 100, HP_MaxTime = t, Parallelism = p, TryNClassifier = 6, HPOptimizer = j)
+          var mselector = new ModelSelector(  spark,
+                                              logpath,
+                                              eta = 5,
+                                              maxResourcePercentage = 100,
+                                              HP_MaxTime = t,
+                                              HPOptimizer = j
+                                            )
           var res = mselector.getBestModel(rawdata)
         }
         catch {

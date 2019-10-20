@@ -29,19 +29,22 @@ class Logger(path:String) extends java.io.Serializable {
   /**
     * the name of the Knowledgebase file
     */
-  var KBfile1 = "KB1_.csv"
+  //var KBfile1 = "KB1_.csv"
   /**
     * the name of the Knowledgebase file
     */
-  var KBfile2 = "KB2_.csv"
+  //var KBfile2 = "KB2_.csv"
 
 
   var outfile = "output.txt"
   // Time Log File
 
   val file1: File = new File(path+timeLogFile)
-  if(!file1.exists())
-    File.createTempFile(path+timeLogFile , "txt")
+  if(!file1.exists()) {
+    println( timeLogFile + " file not exist")
+    File.createTempFile(path + timeLogFile, "txt")
+    println( timeLogFile + " file Created")
+  }
   val pw1 = new PrintWriter(new FileOutputStream(file1 , true))
 
   // Excption Log File
@@ -50,6 +53,7 @@ class Logger(path:String) extends java.io.Serializable {
     File.createTempFile(path+exceptionLogFile , "txt")
   val pw2 = new PrintWriter(new FileOutputStream(file2 , true))
 
+  /*
   //Knowledgebase File Name
   val file3: File = new File(path+KBfile1)
   if(!file3.exists())
@@ -61,11 +65,14 @@ class Logger(path:String) extends java.io.Serializable {
   if(!file4.exists())
     File.createTempFile(path+KBfile2 , "txt")
   val pw4 = new PrintWriter(new FileOutputStream(file4 , true))
-
+*/
   //output
   val file5: File = new File(path+outfile)
-  if(!file5.exists())
-    File.createTempFile(path+outfile , "txt")
+  if(!file5.exists()) {
+    println( file5 + " file not exist")
+    File.createTempFile(path + outfile, "txt")
+    println( file5 + " file Created")
+  }
   val pw5 = new PrintWriter(new FileOutputStream(file5 , true))
 
 
@@ -91,7 +98,7 @@ class Logger(path:String) extends java.io.Serializable {
     * @param s information to be logged
     */
   def logResult(s:String)= {
-    pw3.append(s)
+    //pw3.append(s)
 
   }
 
@@ -100,7 +107,7 @@ class Logger(path:String) extends java.io.Serializable {
     * @param s information to be logged
     */
   def logResult1(s:String)= {
-    pw4.append(s)
+    //pw4.append(s)
   }
 
   /**
@@ -117,14 +124,17 @@ class Logger(path:String) extends java.io.Serializable {
   def close()={
     pw1.close()
     pw2.close()
-    pw3.close()
-    pw4.close()
+    //pw3.close()
+    //pw4.close()
     pw5.close()
   }
 
-
-  def header_lr_space( len :Int): (Int,Int) =
-  {
+  /**
+    * Create Header Frame String
+    * @param len width of header string
+    * @return
+    */
+  def header_lr_space( len :Int): (Int,Int) =  {
 
     var l1_s1 = 0
     var l1_s2 = 0
@@ -142,8 +152,16 @@ class Logger(path:String) extends java.io.Serializable {
     return (l1_s1, l1_s2)
   }
 
-  def printHeader(HPOptimizer:Int, HP_MaxTime:Long,Parallelism:Int,eta:Int, maxResourcePercentage:Int,MaxRandomSearchParam:Int ): Unit =
-  {
+  /**
+    * Print Library Header
+    * @param HPOptimizer  which Optimizer
+    * @param HP_MaxTime   Time Budget
+    * @param Parallelism  Parallelism
+    * @param eta          hyperband eta
+    * @param maxResourcePercentage max Resource Percentage
+    * @param MaxRandomSearchParam  Max Random Search Param
+    */
+  def printHeader(HPOptimizer:Int, HP_MaxTime:Long,Parallelism:Int,eta:Int, maxResourcePercentage:Int,MaxRandomSearchParam:Int, seed:Int ): Unit =   {
     println("-" * (total_width + 2))
     var title1 = "Smart ML 1.0"
     println("|"  + " " * header_lr_space(title1.length)._1 +  title1 + " " * header_lr_space(title1.length)._2 + "|")
@@ -156,7 +174,7 @@ class Logger(path:String) extends java.io.Serializable {
     var dft:java.time.format.DateTimeFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
     var dt = dft.format(java.time.LocalDateTime.now())
     var l1 = "Starting Date Time :" + dt
-    var l2 = "Time Budget:" + HP_MaxTime + " second ,Models Parallelism:" + Parallelism
+    var l2 = "Time Budget:" + HP_MaxTime + " second ,Models Parallelism:" + Parallelism + " ,Seed:" + seed
     var l3 = ""
     if (HPOptimizer==1) {
       l3 = "Hyper-parameter Optimizer: Hyperband, Eta:" + eta + ", Max Data Percentage Used:" + maxResourcePercentage + "%"
@@ -173,16 +191,33 @@ class Logger(path:String) extends java.io.Serializable {
     println("-" * (total_width + 2))
   }
 
+  /**
+    * Print Line
+    */
   def printLine(): Unit =
   {
     println("-" * (total_width + 2))
   }
 
+  /**
+    * Log Line
+    * @return
+    */
   def logLine()={
     logOutput("-" * (total_width + 2) + "\n")
   }
 
-  def logHeader(HPOptimizer:Int, HP_MaxTime:Long,Parallelism:Int,eta:Int, maxResourcePercentage:Int,MaxRandomSearchParam:Int )= {
+  /**
+    * Log Header
+    * @param HPOptimizer
+    * @param HP_MaxTime
+    * @param Parallelism
+    * @param eta
+    * @param maxResourcePercentage
+    * @param MaxRandomSearchParam
+    * @return
+    */
+  def logHeader(HPOptimizer:Int, HP_MaxTime:Long,Parallelism:Int,eta:Int, maxResourcePercentage:Int,MaxRandomSearchParam:Int ,seed:Int)= {
     logOutput("-" * (total_width + 2) + "\n")
     var title1 = "Smart ML 1.0"
     logOutput("|"  + " " * header_lr_space(title1.length)._1 +  title1 + " " * header_lr_space(title1.length)._2 + "|\n")
@@ -195,7 +230,7 @@ class Logger(path:String) extends java.io.Serializable {
     var dft:java.time.format.DateTimeFormatter = java.time.format.DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss");
     var dt = dft.format(java.time.LocalDateTime.now())
     var l1 = "Starting Date Time :" + dt
-    var l2 = "Time Budget:" + HP_MaxTime + " second ,Models Parallelism:" + Parallelism
+    var l2 = "Time Budget:" + HP_MaxTime + " second ,Models Parallelism:" + Parallelism + " ,Seed:" + seed
     var l3 = ""
     if (HPOptimizer==1) {
       l3 = "Hyper-parameter Optimizer: Hyperband, Eta:" + eta + ", Max Data Percentage Used:" + maxResourcePercentage + "%"

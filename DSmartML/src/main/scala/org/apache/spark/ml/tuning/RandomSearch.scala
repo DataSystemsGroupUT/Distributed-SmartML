@@ -1,12 +1,8 @@
 package org.apache.spark.ml.tuning
-//package org.dsmartml
-
 
 import java.text.DecimalFormat
 import java.util.{Date, Locale, List => JList}
-
 import org.apache.hadoop.fs.Path
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification._
@@ -21,13 +17,9 @@ import org.apache.spark.sql._
 import org.apache.spark.util.ThreadUtils
 import org.dsmartml._
 import org.json4s.DefaultFormats
-
 import scala.collection.JavaConverters._
 import scala.concurrent.{Future, TimeoutException}
 import scala.language.existentials
-
-//import org.dsmartml.Logger
-
 import scala.collection.immutable.ListMap
 
 /**
@@ -102,14 +94,12 @@ trait RandomSearchParams extends ValidatorParams {
   setDefault(logToFile -> false)
 
 
-
-
   /**
     * Classifier Name
     *
     * @group param
     */
-  val ClassifierName: Param[String] = new Param[String](this, "logFilePath","Log to File path")
+  val ClassifierName: Param[String] = new Param[String](this, "ClassifierName","ClassifierName")
 
   /** @group getParam */
   def getclassifiername: String = $(ClassifierName)
@@ -130,10 +120,6 @@ trait RandomSearchParams extends ValidatorParams {
   def getmaxTime: Double = $(maxTime)
 
   setDefault(maxTime -> 60 * 10) // 10 minutes
-
-
-
-
 
 }
 
@@ -158,12 +144,15 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
   var spark: SparkSession = null
   var ModelCount = 0
   var ClassifiersMgr: ClassifiersManager = null
+  var StartingTime: Date = new Date()
+  val localStartTime : Date = new Date()
+  val formatter = java.text.NumberFormat.getInstance
+  formatter.setMaximumFractionDigits(2)
 
   setEstimatorParamMaps(Array(new ParamMap()))
   setEstimator(new RandomForestClassifier())
   setEvaluator(new MulticlassClassificationEvaluator())
 
-  //var ClassifierParamsMapIndexed = Map[Int, ParamMap]()
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("tvs"))
@@ -215,9 +204,10 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
   @Since("2.3.0")
   def setParamNumber(value: Int): this.type = set(ParamNumber, value)
 
-  var StartingTime: Date = new Date()
-  val localStartTime : Date = new Date()
-
+  /**
+    * check if timeout or not
+    * @return
+    */
   def IsTimeOut(): Boolean = {
     if (getRemainingTime() == 0)
       return true
@@ -225,6 +215,10 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
       return false
   }
 
+  /**
+    * get remaining time
+    * @return
+    */
   def getRemainingTime(): Long = {
     var rem: Long = ($(maxTime) * 1000) - (new Date().getTime - StartingTime.getTime())
     if (rem < 0)
@@ -232,12 +226,13 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
     return rem
   }
 
+  /**
+    * get elapsed time
+    * @return
+    */
   def getElapsedTime():Long ={
     return (new Date().getTime - localStartTime.getTime())
   }
-
-  val formatter = java.text.NumberFormat.getInstance
-  formatter.setMaximumFractionDigits(2)
 
 
   /**
@@ -248,6 +243,7 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
     */
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): RandomSearchModel = {
+
 
     if (!IsTimeOut()) {
       val Starttime = new java.util.Date().getTime
@@ -318,22 +314,19 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
 
   }
 
-
+  /**
+    * Search for best Model
+    * @param dataset
+    * @param spark
+    * @return
+    */
   def Search(dataset: Dataset[_], spark: SparkSession): (ParamMap, (Double, Model[_]))  = {
 
+    try{
     val ParamStep = $(parallelism)
     var RemainingParamCount = 0
     var curParamNumber = 0
     var currentResult = ListMap[ParamMap, (Double, Model[_], String)]()
-    //val featurecolumns = dataset.columns.filter(c => c != $(TargetColumn))
-    //val nr_features: Int = featurecolumns.length
-    //var nr_classes = dataset.groupBy($(TargetColumn)).count().collect().toList.length
-    //val hasNegativeFeatures = false //HasNegativeValue(dataset.toDF(), nr_features, nr_classes, $(TargetColumn))
-    //StartingTime = new Date()
-
-    // Create Classifiers Manager
-    //val ClassifierMgr = new ClassifiersManager(spark, nr_features, nr_classes)
-
     var bestParamMap: ParamMap = null
     var bestModel: Model[_] = null
     var bestaccur = 0.0
@@ -341,25 +334,29 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
     var parametercount = 0
     var Index = 0
 
-
       // Max random parameters to be tested
-      RemainingParamCount = $(ParamNumber)
+
 
       Index = 0
 
       //get random parameters array
-      var p = ClassifiersMgr.getRandomParameters($(ClassifierName), $(ParamNumber))
-      if (IsTimeOut())
+      var p = ClassifiersMgr.getNRandomParameters( $(ClassifierName), $(ParamNumber)) //ClassifiersMgr.getRandomParameters($(ClassifierName), $(ParamNumber))
+
+    if(p.size > $(ParamNumber))
+      RemainingParamCount = $(ParamNumber)
+    else
+      RemainingParamCount = p.size
+
+    if (IsTimeOut())
       {
         println("     - Time Out.....")
         filelog.logOutput("     - Time Out.....\n")
       }
       else
       {
-        //println("     -" + $(ClassifierName))
-
         // loop and get a group of parameters ( = parallelism) each iteration
         while ( RemainingParamCount > 0 && !IsTimeOut() ) {
+
           // check if there is enough parameters in the array
           if (RemainingParamCount > ParamStep) {
             parametercount = ParamStep
@@ -374,44 +371,27 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
           var arr = new Array[ParamMap](ParamStep)
           for( i <- 0 until  parametercount)
           {
-            arr(i) = p(i + Index)
+            arr(i) = p.values.toList(i + Index)
           }
           Index = Index + parametercount
-
-          //println( " -- Classifier:" + $(ClassifierName) + " , Parm Count:" + arr.size)
-          //println(arr.toSeq.toString())
-
-          /* =================================>
-          for(x <- arr.toSeq)
-          {
-
-              for (p <-x.toSeq)
-                {
-                  print(p.param.name + ":" + p.value)
-                  print(", ")
-                }
-            print("\n")
-          }
-          */
 
           //train for the selected random parameter group
           var res = learn(dataset, arr, $(ClassifierName), ClassifiersMgr)
 
-          //println("     - " + ParamStep +" Models trained and best Accuracy is:" + res._2._1)
-          //check if result is better than before or not)
           if (bestaccur < res._2._1) {
             bestaccur = res._2._1
             bestParamMap = res._1
             bestModel = res._2._2
+
             classifer_name = $(ClassifierName)
             bestClassifier = $(ClassifierName)
-            //currentResult += ( res._1 -> ( res._2._1 , res._2._2 , c))
             println("     - Best Accuracy after " + (getElapsedTime() / 1000.0).toString +" Seconds and  "+ ModelCount +" Models trained is :" + fm4d.format( 100 * bestaccur ) + "%" )
             filelog.logOutput("     - Best Accuracy after " + (getElapsedTime() / 1000.0).toString +" Seconds and  "+ ModelCount +" Models trained is :" + bestaccur + "\n")
           }
         }
+
       }
-    //}
+
 
 
     // cast best model based on the classifier used
@@ -434,7 +414,10 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
     else
       return (bestParamMap, (bestaccur, bestModel.asInstanceOf[QDAModel]))
 
-
+    } catch {
+      case ex: Exception => println("-- Random Search - Search Method :" + ex.getMessage)
+        return null
+    }
   }
 
 
@@ -467,19 +450,10 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
 
       val metricFutures = epm.zipWithIndex.map { case (paramMap, paramIndex) =>
         Future[Double] {
-          //println(paramMap.toString())
-          //println( "Remaining Time 1:" + getRemainingTime())
           val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
-          //println( "Remaining Time 2:" + getRemainingTime())
-          //if (collectSubModelsParam) {
-          //  subModels.get(paramIndex) = model
-          //}
           // TODO: duplicate evaluator to take extra params from input
           val metric = eval.evaluate(model.transform(validationDataset, paramMap))
 
-          //pw.write(" Parameters:" + paramMap.toSeq.toString() + ", Metric:" + metric + "\n")
-          //println("-- -- Metric:" + metric)
-          //println("paramMap:" + paramMap.toString())
           if (ClassifierName == "RandomForestClassifier")
             iterResultMap += (paramMap -> (metric, model.asInstanceOf[RandomForestClassificationModel]))
           else if (ClassifierName == "LogisticRegression")
@@ -499,7 +473,6 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
           else
             iterResultMap += (paramMap -> (metric, model.asInstanceOf[QDAModel]))
 
-          //println("     - "+ ClassifierName +" Accuracy:" + metric )
           ModelCount = ModelCount + 1
           metric
         }(executionContext)
@@ -511,13 +484,10 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
 
       // Wait for all metrics to be calculated
       try {
-        //println( "Remaining Time before:" + (getRemainingTime() / 1000.0))
-        val metrics = metricFutures.map(ThreadUtils.awaitResult(_, duration)) //Duration.Inf))
-        //println( "Remaining Time after:" + (getRemainingTime() / 1000.0))
+        val metrics = metricFutures.map(ThreadUtils.awaitResult(_, duration))
       } catch {
         case ex: TimeoutException => println("     - TimeOut:==> " + ex.getMessage)
         case ex1:Exception => print("")
-        //println(ex.getStackTrace().toString)
       }
       var sortedIterResultMap =
         if (eval.isLargerBetter)
@@ -544,7 +514,6 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
       validationDataset.unpersist()
 
 
-      //println("     ------ best is " + sortedIterResultMap.head._2 + "-----")
       if (ClassifierName == "RandomForestClassifier")
         return (bestParamMap -> (bestaccur , bestModel.asInstanceOf[RandomForestClassificationModel]))
       else if (ClassifierName == "LogisticRegression")
@@ -630,8 +599,6 @@ object RandomSearch extends MLReadable[RandomSearch] {
       val tvs = new RandomSearch(metadata.uid)
         .setEstimator(estimator)
         .setEvaluator(evaluator)
-       // .setEstimatorParamMaps(estimatorParamMaps)
-      //DefaultParamsReader.getAndSetParams(tvs, metadata, skipParams = Option(List("estimatorParamMaps")))
       tvs
     }
   }
