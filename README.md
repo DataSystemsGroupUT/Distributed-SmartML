@@ -74,10 +74,15 @@ We have also added two classifiers (LDA & QDA) to Spark ML to increase the numbe
 ### Installation
 The library published on Maven public repo and it can be referenced easily as shown below:
 
+![Example](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Reference%20Lib.png)
 
 ### Examples
+This is a complete example of using the D-Smart ML library to get the best model for a given dataset (csv file), the example does the following:
+- Create Spark Session
+- Load dataset from CSV file (as DataFrame)
+- Create D-Smart ML Model Selector object and call “getBestModel” function
 
-![Example]https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Example.png
+![Example](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Example.png)
 
 	
 
