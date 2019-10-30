@@ -13,7 +13,7 @@ The library receive dataset as an input and produce an optimized model as an out
 The library extracts some characteristics of the datasets and use an internal knowledgebase to determine the best algorithm, then use a hyperband method to find the best hyper parameters for the selected algorithm.
  
 Finally, the datasets characteristics (meta-data) and its selected algorithm added as a feedback to the knowledgebase.
-![Main Idea](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Example.png)
+![Main Idea](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/MainIdea.png)
 
 ### Datasets Meta Extraction & our Knowledgebase
 For each dataset, a set of meta-data extracted that represent statistics and description for this dataset, the extracted meta data can be grouped as following:
@@ -77,6 +77,7 @@ The library published on Maven public repo and it can be referenced easily as sh
 
 ### Examples
 
+![Example]https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Example.png
 
 	
 
