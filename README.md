@@ -106,6 +106,21 @@ The library published on Maven public repo and it can be referenced easily as sh
  compile 'com.github.ahmed-eissa:DSmartML:0.2.4'
  ```
 
+### Library Parameters
+
+| Parameter| Description | Data Type | Default Value |
+| ------ | ------ |------ |------ |
+| **eta**| an input that controls the proportion of configurations discarded in each round of  SuccessiveHalving (in hyperband) | Integer | 5 |
+|**Max Data Percentage**|the maximum amount of resource that can be allocated to a single configuration|Integer| 100 |
+|**Parallelism**|the maximum amount of resource that can be allocated to a single configuration (models will only be run in parallel if there are enough resources available in the cluster. Otherwise, models will be queued in the Spark scheduler and have to wait for the current jobs to complete before being run.)|Integer|1|
+|**Try N Classifier**|Maximum Number of Algorithms should be checked (out of the best algorithms based on the kB)|Integer|2|
+|**Max Time**|Maximum Time allowed for hyper parameter optimization (per each Algorithm) to get the best hyperparameter values  (in Seconds)| Integer|1800|
+|**HP Optimizer**|Hyper parameters optimizer (1: Random Search or 2: Hyperband)|Integer|2|
+|**Convert To Vector Assembly**|If the input dataset features need to be converted to Vector or not|Boolean|false|
+
+
+
+
 ### Examples
 This is a complete example of using the D-Smart ML library to get the best model for a given dataset (csv file), the example does the following:
 - Create Spark Session
