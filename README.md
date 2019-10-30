@@ -112,7 +112,7 @@ This is a complete example of using the D-Smart ML library to get the best model
 - Load dataset from CSV file (as DataFrame)
 - Create D-Smart ML Model Selector object and call “getBestModel” function
 
-![Example](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Example.png)
+![Example](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Ex.png)
 
 	
 
