@@ -13,7 +13,7 @@ The library receive dataset as an input and produce an optimized model as an out
 The library extracts some characteristics of the datasets and use an internal knowledgebase to determine the best algorithm, then use a hyperband method to find the best hyper parameters for the selected algorithm.
  
 Finally, the datasets characteristics (meta-data) and its selected algorithm added as a feedback to the knowledgebase.
-![Main Idea](https://raw.githubusercontent.com/Ahmed-Eissa/NU_AutoML/master/Main%20Idea.jpg)
+![Main Idea](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Example.png)
 
 ### Datasets Meta Extraction & our Knowledgebase
 For each dataset, a set of meta-data extracted that represent statistics and description for this dataset, the extracted meta data can be grouped as following:
@@ -72,6 +72,8 @@ We have used Apache Spark to distribute the process (Feature Extraction, Algorit
 We have also added two classifiers (LDA & QDA) to Spark ML to increase the number of the available classifiers.
 
 ### Installation
+The library published on Maven public repo and it can be referenced easily as shown below:
+
 
 ### Examples
 
