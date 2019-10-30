@@ -130,6 +130,10 @@ This is a complete example of using the D-Smart ML library to get the best model
 ![Example](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Ex.png)
 
 	
+### Library Output
+The below images, is a sample of the  library output
+
+![Output](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Output_.png)
 
 
 
