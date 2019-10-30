@@ -69,7 +69,7 @@ An important characteristic adds to the knowledge base is the accuracy against m
 ### <a id="as"></a>Algorithm Selection
 Since we have knowledge base contains the characteristics & the best classifier for a group of datasets, we can use machine learning to get the closest dataset in the knowledge base for an input dataset, then determine the expected best classifiers.
 
-### <a id=hp"></a>Hyper parameter Optimization
+### <a id="hp"></a>Hyper parameter Optimization
 We are using Hyperband in order to determine best hyperparameters quickly, hyperband based on Successive Halving algorithm which allocates exponentially more resources to more promising configurations, the algorithm do the following:
 1)	Uniformly allocate a budget to a set of hyperparameter configurations
 2)	Evaluate the performance of all configurations
