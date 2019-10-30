@@ -74,7 +74,37 @@ We have also added two classifiers (LDA & QDA) to Spark ML to increase the numbe
 ### Installation
 The library published on Maven public repo and it can be referenced easily as shown below:
 
-![Example](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Reference%20Lib.png)
+
+>**Maven**
+```sh
+<dependency>
+	<groupId>com.github.DataSystemsGroupUT</groupId>
+	<artifactId>D-SmartML</artifactId>
+	<version>0.1</version>
+</dependency>
+```
+
+ <br />
+ 
+ >**Scala SBT**
+```sh
+ libraryDependencies += "com.github.DataSystemsGroupUT" % "D-SmartML" % "0.1"
+ ```
+ 
+  <br />
+ 
+ >**Groovy Grape**
+```sh
+@Grapes(
+@Grab(group='com.github.DataSystemsGroupUT', module='D- SmartML', version='0.1')
+)
+ ```
+ <br />
+ 
+ >**Gradle/Grails**
+```sh
+ compile 'com.github.ahmed-eissa:DSmartML:0.2.4'
+ ```
 
 ### Examples
 This is a complete example of using the D-Smart ML library to get the best model for a given dataset (csv file), the example does the following:
