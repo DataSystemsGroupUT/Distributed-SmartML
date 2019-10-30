@@ -71,7 +71,7 @@ we have used number of instances (data sampling) as the hyperband resource,so th
 We have used Apache Spark to distribute the process (Feature Extraction, Algorithm Selection and hyper parameter optimization).
 We have also added two classifiers (LDA & QDA) to Spark ML to increase the number of the available classifiers.
 
-### Installation
+## Installation
 The library published on Maven public repo and it can be referenced easily as shown below:
 
 
@@ -106,7 +106,7 @@ The library published on Maven public repo and it can be referenced easily as sh
  compile 'com.github.ahmed-eissa:DSmartML:0.2.4'
  ```
 
-### Library Parameters
+## Library Parameters
 
 | Parameter| Description | Data Type | Default Value |
 | ------ | ------ |------ |------ |
@@ -121,7 +121,7 @@ The library published on Maven public repo and it can be referenced easily as sh
 
 
 
-### Examples
+## Examples
 This is a complete example of using the D-Smart ML library to get the best model for a given dataset (csv file), the example does the following:
 - Create Spark Session
 - Load dataset from CSV file (as DataFrame)
@@ -130,7 +130,7 @@ This is a complete example of using the D-Smart ML library to get the best model
 ![Example](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Ex.png)
 
 	
-### Library Output
+## Library Output
 The below images, is a sample of the  library output
 
 ![Output](https://github.com/DataSystemsGroupUT/Distributed-SmartML/blob/master/Images/Output_.png)
