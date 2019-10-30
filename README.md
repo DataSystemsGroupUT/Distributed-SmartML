@@ -1,14 +1,16 @@
 # D-Smart ML Library
 
-- [Introduction](#contact_form)
-- [D-Smart-ML Library](#contact_form)
-	- [The Main Idea](#contact_form)
-	- [Datasets Meta Extraction & our Knowledgebase](#contact_form)
-	- [Algorithm Selection](#contact_form)
-	- [Spark Implementation](#contact_form)
-- [Installation](#contact_form)
-- [Examples](#contact_form)
-- [Library Output](#contact_form)
+- [Introduction](#intro)
+- [D-Smart-ML Library](#lib)
+	- [The Main Idea](#idea)
+	- [Datasets Meta Extraction & our Knowledgebase](#ds)
+	- [Algorithm Selection](#as)
+	- [Hyper parameter Optimization](#hp)	
+	- [Spark Implementation](#sp)
+- [Installation](#install)
+- [Library Parameters](#param)
+- [Examples](#ex)
+- [Library Output](#output)
 
 
 ## <a id="intro"></a>Introduction ##
