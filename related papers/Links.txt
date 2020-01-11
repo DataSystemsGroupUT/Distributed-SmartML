@@ -1,0 +1,26 @@
+1-Hyperparameter Optimization
+  https://www.youtube.com/watch?v=mmoYYACFX0c
+
+2- A Conceptual Explanation of Bayesian Hyperparameter Optimization
+  https://towardsdatascience.com/a-conceptual-explanation-of-bayesian-model-based-hyperparameter-optimization-for-machine-learning-b8172278050f
+
+3- Hyper-parameter optimization algorithms: a short review
+  https://medium.com/criteo-labs/hyper-parameter-optimization-algorithms-2fe447525903
+
+4- * Hyperparameter optimization: Explanation of automatized algorithms
+	http://dkopczyk.quantee.co.uk/hyperparameter-optimization/
+
+5- Intro to Kernel Density Estimation
+  https://www.youtube.com/watch?v=x5zLaWT5KPs&t=631s
+
+6- HyperOpt TPE
+  https://github.com/hyperopt/hyperopt/blob/master/hyperopt/tpe.py
+
+7- KDEpy
+  https://github.com/tommyod/KDEpy/tree/master/KDEpy
+
+8- Scala KDE
+  http://www.scalaformachinelearning.com/2018/05/multivariate-kernel-density-estimation.html
+
+9- Python KDE
+  https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.gaussian_kde.html
