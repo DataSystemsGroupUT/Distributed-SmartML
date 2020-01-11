@@ -1,0 +1,7 @@
+site_name: D-Smart ML
+nav:
+    - Home: index.md
+    - Installation: Install.md
+    - Quick Start: Start.md
+    - Documentation: docs.md
+    - Performance: performance.md

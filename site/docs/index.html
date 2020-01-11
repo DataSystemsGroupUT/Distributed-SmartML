@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        
+        
+        
+        <link rel="shortcut icon" href="../img/favicon.ico">
+        <title>Documentation - D-Smart ML</title>
+        <link href="../css/bootstrap-custom.min.css" rel="stylesheet">
+        <link href="../css/font-awesome.min.css" rel="stylesheet">
+        <link href="../css/base.css" rel="stylesheet">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
+        <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
+        <!--[if lt IE 9]>
+            <script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+            <script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+        <![endif]-->
+
+        <script src="../js/jquery-1.10.2.min.js" defer></script>
+        <script src="../js/bootstrap-3.0.3.min.js" defer></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+        <script>hljs.initHighlightingOnLoad();</script> 
+    </head>
+
+    <body>
+
+        <div class="navbar navbar-default navbar-fixed-top" role="navigation">
+            <div class="container">
+
+                <!-- Collapsed navigation -->
+                <div class="navbar-header">
+                    <!-- Expander button -->
+                    <button type="button" class="navbar-toggle" data-toggle="collapse" data-target=".navbar-collapse">
+                        <span class="sr-only">Toggle navigation</span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                        <span class="icon-bar"></span>
+                    </button>
+                    <a class="navbar-brand" href="..">D-Smart ML</a>
+                </div>
+
+                <!-- Expanded navigation -->
+                <div class="navbar-collapse collapse">
+                        <!-- Main navigation -->
+                        <ul class="nav navbar-nav">
+                            <li >
+                                <a href="..">Home</a>
+                            </li>
+                            <li >
+                                <a href="../Install/">Installation</a>
+                            </li>
+                            <li >
+                                <a href="../Start/">Quick Start</a>
+                            </li>
+                            <li class="active">
+                                <a href="./">Documentation</a>
+                            </li>
+                            <li >
+                                <a href="../performance/">Performance</a>
+                            </li>
+                        </ul>
+
+                    <ul class="nav navbar-nav navbar-right">
+                        <li>
+                            <a href="#" data-toggle="modal" data-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                            <li >
+                                <a rel="next" href="../Start/">
+                                    <i class="fa fa-arrow-left"></i> Previous
+                                </a>
+                            </li>
+                            <li >
+                                <a rel="prev" href="../performance/">
+                                    Next <i class="fa fa-arrow-right"></i>
+                                </a>
+                            </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+                <div class="col-md-3"><div class="bs-sidebar hidden-print affix well" role="complementary">
+    <ul class="nav bs-sidenav">
+        <li class="main active"><a href="#documentation">Documentation</a></li>
+            <li><a href="#high-level-design">HIGH LEVEL DESIGN</a></li>
+            <li><a href="#processing-sequence">PROCESSING SEQUENCE</a></li>
+            <li><a href="#parameters">Parameters</a></li>
+    </ul>
+</div></div>
+                <div class="col-md-9" role="main">
+
+<h1 id="documentation">Documentation</h1>
+<h2 id="high-level-design">HIGH LEVEL DESIGN</h2>
+<p>The library has the following main component:</p>
+<p><img alt="Output" src="https://raw.githubusercontent.com/DataSystemsGroupUT/Distributed-SmartML/master/Images/design.png" />
+<ul></p>
+<li>
+<b>Model Selector</b>:<br/>
+Responsible for Receiving Dataset and return the best Machine learning model found within the specified time budget.
+It exposes a function “getBestModel” that start the Algorithm selection & Hyper-parameters optimization process.
+</li>
+
+<li>
+<b>Meta Data Manager</b>:<br/>
+Responsible for extracting the Dataset metadata (the data set characteristics) and produce a metadata object represent the dataset characteristic
+The created object similar to Knowledgebase instances
+</li>
+
+<li>
+<b>KB Manager</b>:<br/>
+Responsible for handling all Knowledgebase activates like (Load Knowledge base, update knowledge base, …)
+But the most important role, is to determine the suitable algorithms based on the dataset meta data and the loaded Knowledge base
+</li>
+
+<li>
+<b>Classifier Manager</b>:<br/>
+Represent all Classifiers and their parameters.
+It contains the distribution for each parameter, to be used in random search and hyperband
+It contains hyper-parameters range to be used with Grid Search
+</li>
+
+<li>
+<b>KB Model</b>:<br/>
+The mode that has been built based on the knowledge base and use to predict the suitable classifier(s)
+</li>
+
+<li>
+<b>Grid Search</b>:<br/>
+Responsible for doing Grid Search algorithm to do hyper parameter optimization
+</li>
+
+<li>
+<b>Random Search</b>:<br/>
+Responsible for doing Random Search algorithm to do hyper parameter optimization
+</li>
+
+<li>
+<b>Hyperband</b>:<br/>
+Responsible for doing hyperband algorithm to do hyper parameter optimization
+</li>
+
+</ul>
+
+<h2 id="processing-sequence">PROCESSING SEQUENCE</h2>
+<p>To get the best model for input dataset, the library executes the following sequence:
+<ol>
+<li>“Model Selector” receive the dataset and call “KB Manger” to determine best classifiers suitable to the dataset.</li>
+<li>“KB Manager” Load KB Model and call “Meta data manger” to extract metadata</li>
+<li>“KB Manager” receive Metadata object and use the loaded model to predict suitable classifier then return Classifier List</li>
+<li>“Model Selector” loop on the classifiers list and call “Classifier manger” to get the hyperparameters for each classifier (and their values distribution or grid)</li>
+<li>“Model Selector” call “Hyperband” or “Random Search” or “Grid Search” and send the Classifier and its hyper parameters (distribution or grid) </li>
+</ol>
+<img alt="Output" src="https://raw.githubusercontent.com/DataSystemsGroupUT/Distributed-SmartML/master/Images/Flow.png" /></p>
+<h2 id="parameters">Parameters</h2>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Description</th>
+<th>Data Type</th>
+<th>Default Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>eta</strong></td>
+<td>an input that controls the proportion of configurations discarded in each round of  SuccessiveHalving (in hyperband)</td>
+<td>Integer</td>
+<td>5</td>
+</tr>
+<tr>
+<td><strong>Max Data Percentage</strong></td>
+<td>the maximum amount of resource that can be allocated to a single configuration</td>
+<td>Integer</td>
+<td>100</td>
+</tr>
+<tr>
+<td><strong>Parallelism</strong></td>
+<td>the maximum amount of resource that can be allocated to a single configuration (models will only be run in parallel if there are enough resources available in the cluster. Otherwise, models will be queued in the Spark scheduler and have to wait for the current jobs to complete before being run.)</td>
+<td>Integer</td>
+<td>1</td>
+</tr>
+<tr>
+<td><strong>Try N Classifier</strong></td>
+<td>Maximum Number of Algorithms should be checked (out of the best algorithms based on the kB)</td>
+<td>Integer</td>
+<td>2</td>
+</tr>
+<tr>
+<td><strong>Max Time</strong></td>
+<td>Maximum Time allowed for hyper parameter optimization (per each Algorithm) to get the best hyperparameter values  (in Seconds)</td>
+<td>Integer</td>
+<td>1800</td>
+</tr>
+<tr>
+<td><strong>HP Optimizer</strong></td>
+<td>Hyper parameters optimizer (1: Random Search or 2: Hyperband)</td>
+<td>Integer</td>
+<td>2</td>
+</tr>
+<tr>
+<td><strong>Convert To Vector Assembly</strong></td>
+<td>If the input dataset features need to be converted to Vector or not</td>
+<td>Boolean</td>
+<td>false</td>
+</tr>
+</tbody>
+</table></div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script>
+            var base_url = "..",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="../js/base.js" defer></script>
+        <script src="../search/main.js" defer></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="Search Modal" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+                <h4 class="modal-title" id="exampleModalLabel">Search</h4>
+            </div>
+            <div class="modal-body">
+                <p>
+                    From here you can search these documents. Enter
+                    your search terms below.
+                </p>
+                <form role="form">
+                    <div class="form-group">
+                        <input type="text" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="Keyboard Shortcuts Modal" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+                <h4 class="modal-title" id="exampleModalLabel">Keyboard Shortcuts</h4>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
