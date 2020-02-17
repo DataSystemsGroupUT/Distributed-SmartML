@@ -1,6 +1,6 @@
 package org.dsmartml.examples
 
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.DoubleType
 import org.dsmartml._
@@ -17,13 +17,13 @@ object App_GetBestModel {
     //*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*=*
     //1- Google Cloud -->
     //-------------------------------------------------
-    var dataFolderPath = "gs://sparkstorage/datasets/"
-    var logpath = "/home/eissa_abdelrahman5/"
+    //var dataFolderPath = "gs://sparkstorage/datasets/"
+    //var logpath = "/home/eissa_abdelrahman5/"
 
     //2- Local -->
     //-------------------------------------------------
-    //var dataFolderPath = "/media/eissa/New/data/"
-    //var logpath = "/media/eissa/New/data/"
+    var dataFolderPath = "/media/eissa/New/data/"
+    var logpath = "/media/eissa/New/data/"
 
     //3- Azure Cloud -->
     //-------------------------------------------------
@@ -37,6 +37,13 @@ object App_GetBestModel {
     val j = args(1).toInt
     // Time Limit
     val t = args(2).toInt
+    // skip sh
+    val skip_SH = args(3).toInt
+    //SplitbyClass
+    val SplitbyClass =  if (args(4).toInt == 1 ) true else false
+    //basicDataPerventage
+    val basicDataPercentage = args(5).toDouble
+
     // Parallelism
     val p = 3 //args(3).toInt
 
@@ -47,8 +54,8 @@ object App_GetBestModel {
       .builder()
       .appName("Distributed Smart ML 1.0")
       //.config("packages" , "com.salesforce.transmogrifai:transmogrifai-core_2.11:0.5.3")
-      //.config("spark.master", "local")
-      .config("spark.master", "yarn")
+      .config("spark.master", "local")
+      //.config("spark.master", "yarn")
       //.config("spark.executor.memory", "15g")
       //.config("spark.driver.memory", "6g")
       //.config("spark.storage.memoryFraction" , "2")
@@ -61,12 +68,17 @@ object App_GetBestModel {
 
     //Create Logger Instance
     var logger = new Logger(logpath)
-    try{
+
 
       // Load Dataset
       var dataloader = new DataLoader(spark, i, dataFolderPath, logger)
       var rawdata = dataloader.getData()
 
+    println("Number of partations(after loading): " + rawdata.rdd.getNumPartitions)
+
+
+
+    try{
 
       // get best Model for this dataset using Distributed SmartML Library
       //===================================================================================
@@ -75,10 +87,13 @@ object App_GetBestModel {
         try {
           var mselector = new ModelSelector(  spark,
                                               logpath,
-                                              eta = 5,
+                                              eta = 3,
                                               maxResourcePercentage = 100,
                                               HP_MaxTime = t,
-                                              HPOptimizer = j
+                                              HPOptimizer = j,
+                                              skip_SH = skip_SH,
+                                              SplitbyClass = SplitbyClass,
+                                              basicDataPercentage = basicDataPercentage
                                             )
           var res = mselector.getBestModel(rawdata)
         }

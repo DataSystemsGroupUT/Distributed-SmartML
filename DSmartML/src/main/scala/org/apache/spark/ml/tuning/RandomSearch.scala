@@ -38,7 +38,7 @@ trait RandomSearchParams extends ValidatorParams {
   /** @group getParam */
   def getParamNumber: Int = $(ParamNumber)
 
-  setDefault(ParamNumber -> 20)
+  setDefault(ParamNumber -> 10)
 
   /**
     * the maximum amount of resource that can

@@ -7,7 +7,7 @@ import org.apache.spark.ml.feature.{MinMaxScaler, StandardScaler, VectorAssemble
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions.{col, _}
 import org.apache.spark.sql.types.DoubleType
-
+import scala.collection.mutable.ListBuffer
 import scala.collection.immutable.ListMap
 
 /**
@@ -53,9 +53,6 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
     logger.logOutput("1 - Extract Statistical Metadata ")
     var metadata: DatasetMetadata = new DatasetMetadata()
     val starttime  =  new java.util.Date().getTime
-
-
-
 
 
     // # Drop raw if all of its values are missing
@@ -210,6 +207,292 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
       metadata.class_entropy = metadata.class_entropy - prob * math.log(prob)
     }
     metadata.nr_classes = prob_classes.length
+
+    //12 - Maximum Class probability - DONE
+    metadata.max_prob = prob_classes.max
+
+    //13- Minimum Class probability - DONE
+    metadata.min_prob = prob_classes.min
+
+    //14-  Mean Class probability - DONE
+    metadata.mean_prob = prob_classes.sum / prob_classes.length
+
+    //15 -  Standard Deviation of Class probability - DONE
+    metadata.std_dev = 0.0
+    for (x <- classes_prob_List) {
+      var prob = (x(1).asInstanceOf[Long].toDouble / metadata.nr_instances)
+      metadata.std_dev = metadata.std_dev + ((prob - metadata.mean_prob) * (prob - metadata.mean_prob))
+    }
+    metadata.std_dev = metadata.std_dev / (prob_classes.length - 1)
+    metadata.std_dev = math.pow(metadata.std_dev, 0.5)
+
+    // 16 -  Dataset Ratio - DONE
+    metadata.dataset_ratio = metadata.nr_features.toDouble / metadata.nr_instances.toDouble
+    val endtime_classess =  new java.util.Date().getTime
+    //logger.logTime("Classes Entropy & Statistics:" + (ClassesStatt2 - ClassesStatt1) + ",")
+    //println("    - Classes Entropy & Statistics:" + (ClassesStatt2 - ClassesStatt1) + ",")
+
+
+    // =====> Categorical Features Statistics
+    // ===================================================================================================
+    // ByteType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType
+    val CategoricalFeatureStatt1 =  new java.util.Date().getTime
+    var CategoricalFeatureStatt2 =  new java.util.Date().getTime
+    var symbols = new ListBuffer[Double]()
+
+    if (categorical.length > 0) {
+
+      //17- Symbols Sum - DONE
+      metadata.symbols_sum  = ColumnsSumValMap.filterKeys( k => categorical.contains(k)).values.sum
+
+      //18- Symbols Mean - DONE
+      metadata.symbols_mean = symbols.sum / categorical.length
+
+      //19- Symbols Standard Deviation - DONE
+      metadata.symbols_std_dev = math.pow(symbols.map(i => math.pow((i - metadata.symbols_mean), 2)).sum / categorical.length, 0.5)
+
+      CategoricalFeatureStatt2 =  new java.util.Date().getTime
+      //logger.logTime("Categorical Features Statistics:" + (CategoricalFeatureStatt2 - CategoricalFeatureStatt1) + ",")
+      //println("    - Categorical Features Statistics:" + (CategoricalFeatureStatt2 - CategoricalFeatureStatt1) + ",")
+
+
+    }
+
+
+    // Numerical Features Statistics
+    //===========================================================================
+    val NumericalFeatureStatt1 =  new java.util.Date().getTime
+    var NumericalFeatureStatt2 =  new java.util.Date().getTime
+    var skewness_values = new Array[Double](numerical.length)
+    var kurtosis_values = new Array[Double](numerical.length)
+    var counter = 0
+
+
+    skewness_values = ColumnsskewnValMap.filterKeys( k => numerical.contains(k)).values.toArray
+    kurtosis_values = ColumnskurtValMap.filterKeys( k => numerical.contains(k)).values.toArray
+
+    if (numerical.length > 0) {
+      //20. Skewness Minimum - DONE
+      metadata.skew_min = skewness_values.min
+
+      //21. Skewness Maximum - DONE
+      metadata.skew_max = skewness_values.max
+
+      //22. Skewness Mean - DONE
+      metadata.skew_mean = skewness_values.sum / skewness_values.length
+
+      // 23. Skewness Standard deviation - DONE
+      metadata.skew_std_dev = math.pow(skewness_values.map(i => math.pow((i - metadata.skew_mean), 2)).sum / skewness_values.length, 0.5)
+
+      //24. Kurtosis Minimum - DONE
+      metadata.kurtosis_min = kurtosis_values.min
+
+      //25. Kurtosis Maximum - DONE
+      metadata.kurtosis_max = kurtosis_values.max
+
+      // 26. Kurtosis Mean - DONE
+      metadata.kurtosis_mean = kurtosis_values.sum / kurtosis_values.length
+
+      // 27. Kurtosis Standard Deviation - DONE
+      metadata.kurtosis_std_dev = math.pow(kurtosis_values.map(i => math.pow((i - metadata.kurtosis_mean), 2)).sum / kurtosis_values.length, 0.5)
+
+      NumericalFeatureStatt2 =  new java.util.Date().getTime
+      //logger.logTime("Numerical Feature Statistics:" + (NumericalFeatureStatt2 - NumericalFeatureStatt1) + ",")
+      //println("    -Numerical Feature Statistics:" + (NumericalFeatureStatt2 - NumericalFeatureStatt1) + ",")
+    }
+
+    val Endtime =  new java.util.Date().getTime
+    val TotalTime = Endtime - starttime
+    //logger.logTime("Meta Data Extraction Time:" + TotalTime.toString + ",")
+
+    println("(Step Time:" + (TotalTime/1000.0).toString + " Sec.)" )
+    println("   -- Number of Instances:" +  metadata.nr_instances + " (Time: "+((endtime_countInstances - starttime_countInstances)/1000.0).toString+" sec.)")
+    println("   -- Number of Features :" + metadata.nr_features + " (Time: "+((endtime_countFeatures - starttime_countFeatures)/1000.0).toString+" sec.)")
+    println("   -- Number of Classess :" + metadata.nr_classes + " Max Probabitilty:" + fm4d.format(metadata.max_prob) + "%, Min Probability:" + fm4d.format(metadata.min_prob) + "% (Time: "+((endtime_classess - starttime_classess)/1000.0).toString+" sec.)")
+    println("   -- Number of Categorical Features: :" + metadata.nr_categorical_features + ", Number of Numerical Features: " + metadata.nr_numerical_features + " (Time: "+((endtime_CountFeaturesTypet - starttime_CountFeaturesTypet)/1000.0).toString+" sec.)")
+    println("   -- Number of Missing Values: :" + metadata.missing_val + " (Time: "+((endtime_MissingValueCount - starttime_MissingValueCount)/1000.0).toString+" sec.)")
+    println("   -- Numerical Feature Statistics Time:" + (NumericalFeatureStatt2 - NumericalFeatureStatt1)/1000.0 + " sec")
+    println("   -- Categorical Features Statistics Time:" + (CategoricalFeatureStatt2 - CategoricalFeatureStatt1)/1000.0 + " sec")
+    logger.printLine()
+
+    logger.logOutput("(Step Time:" + (TotalTime/1000.0).toString + " Sec.)\n" )
+    logger.logOutput("   -- Number of Instances:" +  metadata.nr_instances + " (Time: "+((endtime_countInstances - starttime_countInstances)/1000.0).toString+" sec.)\n")
+    logger.logOutput("   -- Number of Features :" + metadata.nr_features + " (Time: "+((endtime_countFeatures - starttime_countFeatures)/1000.0).toString+" sec.)\n")
+    logger.logOutput("   -- Number of Classess :" + metadata.nr_classes + " Max Probabitilty:" + fm4d.format(metadata.max_prob) + "%, Min Probability:" + fm4d.format(metadata.min_prob) + "% (Time: "+((endtime_classess - starttime_classess)/1000.0).toString+" sec.)\n")
+    logger.logOutput("   -- Number of Categorical Features: :" + metadata.nr_categorical_features + ", Number of Numerical Features: " + metadata.nr_numerical_features + " (Time: "+((endtime_CountFeaturesTypet - starttime_CountFeaturesTypet)/1000.0).toString+" sec.)\n")
+    logger.logOutput("   -- Number of Missing Values: :" + metadata.missing_val + " (Time: "+((endtime_MissingValueCount - starttime_MissingValueCount)/1000.0).toString+" sec.)\n")
+    logger.logOutput("   -- Numerical Feature Statistics Time:" + (NumericalFeatureStatt2 - NumericalFeatureStatt1)/1000.0 + " sec\n")
+    logger.logOutput("   -- Categorical Features Statistics Time:" + (CategoricalFeatureStatt2 - CategoricalFeatureStatt1)/1000.0 + " sec\n")
+    logger.logLine()
+
+    //_metadata = metadata
+    return metadata
+
+  }
+
+
+  def ExtractStatisticalMetadataSimple(rawdata:DataFrame ): DatasetMetadata = {
+
+    print("1 - Extract Statistical Metadata ")
+    logger.logOutput("1 - Extract Statistical Metadata ")
+    var metadata: DatasetMetadata = new DatasetMetadata()
+    val starttime  =  new java.util.Date().getTime
+
+
+    // # Drop raw if all of its values are missing
+    var df = rawdata.na.drop(1)
+
+    //1- number of instances
+    val starttime_countInstances =  new java.util.Date().getTime
+    metadata.nr_instances = df.count()
+    val endtime_countInstances =  new java.util.Date().getTime
+
+    //2- log of umber of instances
+    metadata.log_nr_instances = math.log(metadata.nr_instances)
+
+    //3- Number of Features
+    val starttime_countFeatures =  new java.util.Date().getTime
+    var features: Array[String] = df.columns.filter(c => c != TargetCol)
+    metadata.nr_features = features.length
+    val endtime_countFeatures =  new java.util.Date().getTime
+
+    //4- log number of Features
+    metadata.log_nr_features = math.log(metadata.nr_features)
+
+
+    //println("    - Count instances:" + (Endtime1 - starttime1) )
+    //5- Features Statistics
+    //====================================================================================================
+    val starttime_MissingValueCount =  new java.util.Date().getTime
+    var cond : Column = null
+    var currcol: Array[String] = null
+    var columncounter = 0
+    val iterationcolumns = 200
+
+    // Distinct Value
+    var ColumnsDistinctValMap = Map[String, Long]()
+    var DistinctValueRow : Row = null
+    // sum Value
+    var ColumnsSumValMap = Map[String, Double]()
+    var SumValueRow : Row = null
+    // skewness Value
+    var ColumnsskewnValMap = Map[String, Double]()
+    var skewnValueRow : Row = null
+    // kurtosis Value
+    var ColumnskurtValMap = Map[String, Double]()
+    var kurtValueRow : Row = null
+    // Min Value
+    var ColumnMinValMap = Map[String, Double]()
+    var MinValueRow : Row = null
+
+
+    var l = metadata.nr_features / iterationcolumns
+
+    for (c <- 0 to l)
+    {
+
+      currcol = features.slice(c * iterationcolumns, (c * iterationcolumns) + (iterationcolumns))
+      if (currcol.length > 0 ) {
+        // missing values
+        cond = currcol.map(x => col(x).isNull).reduce(_ || _)
+        //Distinct count
+        DistinctValueRow = df.select(currcol.map(c => countDistinct(col(c)).alias(c)): _*).collect()(0)
+
+        //skewn
+        skewnValueRow = df.select(currcol.map(c => skewness(col(c)).alias(c)): _*).collect()(0)
+        //skewn
+        SumValueRow = df.select(currcol.map(c => sum(col(c)).alias(c)): _*).collect()(0)
+        //Min
+        MinValueRow = df.select(currcol.map(c => min(col(c)).alias(c)): _*).collect()(0)
+        //kurt
+        kurtValueRow = df.select(currcol.map(c => kurtosis(col(c)).alias(c)): _*).collect()(0)
+        metadata.missing_val = metadata.missing_val + df.filter(cond).count()
+        for (cc <- currcol) {
+
+          ColumnsDistinctValMap += (cc -> DistinctValueRow(columncounter).asInstanceOf[Long])
+          ColumnskurtValMap += (cc -> kurtValueRow(columncounter).asInstanceOf[Number].doubleValue())
+          ColumnsskewnValMap += (cc -> skewnValueRow(columncounter).asInstanceOf[Number].doubleValue())
+          ColumnsSumValMap += (cc -> SumValueRow(columncounter).asInstanceOf[Number].doubleValue())
+          ColumnMinValMap += (cc -> MinValueRow(columncounter).asInstanceOf[Number].doubleValue())
+
+          columncounter = columncounter + 1
+        }
+        columncounter = 0
+        //println(" 100 Features Loop Number:" + c)
+      }
+
+    }
+
+
+    if (ColumnMinValMap.values.toArray.filter(d => d < 0).length > 0)
+      metadata.hasNegativeFeatures = true
+
+    val endtime_MissingValueCount =  new java.util.Date().getTime
+    //println("    - Count Missing Values, Kur, skew, min:" + (MissingValueCountt4 - MissingValueCountt3) )
+    //logger.logTime("Categorical & Continuse Features Statistics:" + (MissingValueCountt4 - MissingValueCountt3) + ",")
+
+
+    //6- Ratio of missing value
+    metadata.ratio_missing_val = metadata.missing_val.toDouble / metadata.nr_instances.toDouble
+    val Endtime2 =  new java.util.Date().getTime
+
+    //7 - Number of Numerical Features & Categorical Features
+    // here i will remove coulmn with constant value
+    // will remove column with non numeric data type
+    // accepted type are : ByteType, DecimalType, DoubleType, FloatType, IntegerType, LongType, ShortType
+    val starttime_CountFeaturesTypet =  new java.util.Date().getTime
+
+    var numerical = new ListBuffer[String]()
+    var categorical = new ListBuffer[String]()
+    var ColumnsTypes = Map[String, org.apache.spark.sql.types.DataType]()
+
+    for ((k,v) <- ColumnsDistinctValMap)
+    {
+      if (k != TargetCol) {
+        if (v < 2)
+          df = df.drop(k)
+        else if (v < metadata.log_nr_instances) {
+          categorical += k
+          // categoricalFeaturesInfo.put(i, v.toInt)
+          //if (v > maxcat)
+          //  maxcat = v.toInt
+        }
+        else
+          numerical += k
+      }
+    }
+    metadata.nr_numerical_features = numerical.length
+    metadata.nr_categorical_features = categorical.length
+    val Endtime3 =  new java.util.Date().getTime
+    val endtime_CountFeaturesTypet =  new java.util.Date().getTime
+    //logger.logTime("Count Categorical & Continuse Features:" + (CountFeaturesTypet2 - CountFeaturesTypet1) + ",")
+    //println("    - Count Categorical & Continuse Features:" + (CountFeaturesTypet2 - CountFeaturesTypet1) + ",")
+
+    //10  Ratio of Categorical to Numerical Features - DONE
+    metadata.ratio_num_cat = 999999999.0
+    if (metadata.nr_numerical_features > 0)
+      metadata.ratio_num_cat = metadata.nr_categorical_features.toDouble / metadata.nr_numerical_features.toDouble
+
+
+    // =====> Classes  Statistics
+    // ===================================================================================================
+    val starttime_classess =  new java.util.Date().getTime
+    //11- Class Entropy - DONE
+    var prob_classes = new ListBuffer[Double]()
+    metadata.class_entropy = 0.0
+    //import spark.implicits._
+    //var classes = df.select(TargetCol).distinct().map( r => r.getAs[Integer](0)).collect()
+    //var classes_prob_Map = df.groupBy(TargetCol).count().map(r => (r.getInt(0), r.getLong(1))).collect()
+    var classes_prob_List = df.groupBy(TargetCol).count().collect().toList
+
+    for (x <- classes_prob_List) {
+      var prob = (x(1).asInstanceOf[Long].toDouble / metadata.nr_instances)
+
+      prob_classes += prob
+      metadata.class_entropy = metadata.class_entropy - prob * math.log(prob)
+    }
+    metadata.nr_classes = prob_classes.length
+
 
     //12 - Maximum Class probability - DONE
     metadata.max_prob = prob_classes.max
@@ -703,6 +986,8 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
     return metadata
 
   }
+
+
 
 
 }

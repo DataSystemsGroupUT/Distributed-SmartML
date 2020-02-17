@@ -390,6 +390,9 @@ class KBManager(spark:SparkSession, logger:Logger, TargetCol:String = "y") exten
     * @return list of the indecies of predict classifiers
     */
   def PredictBestClassifiers(rawdata:DataFrame , ClassifiersListParam:String = ""): List[Int] = {
+
+
+
     //println("Select Best Algorithms based on the KB")
     var metadataMgr = new MetadataManager(spark, logger, TargetCol)
     var classifiersLsit = ClassifiersManager.classifiersLsit
@@ -397,11 +400,17 @@ class KBManager(spark:SparkSession, logger:Logger, TargetCol:String = "y") exten
     var result:Array[Double] = null
     var numcol = 0
 
-    var metadata = metadataMgr.ExtractStatisticalMetadata(rawdata)
+    var metadata = metadataMgr.ExtractStatisticalMetadataSimple(rawdata)
+
 
     val starttime1 =  new java.util.Date().getTime
 
     _metadata = metadata
+
+
+    //return List(0,2,6,7)
+
+
     if(ClassifiersListParam != "")
       classifiersLsit = classifiersLsit.filter( p =>  ClassifiersListParam.split(",").contains(p))
 
