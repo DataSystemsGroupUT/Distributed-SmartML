@@ -60,6 +60,39 @@ trait HyperbandParams extends ValidatorParams {
   setDefault(maxResource -> 1)
 
 
+
+  /**
+    * data percentage starting point
+    * added to r in each sh iteration
+    * Default: 0
+    *
+    * @group param
+    */
+  val basicDataPercentage: DoubleParam = new DoubleParam(this, "basicDataPerventage",
+    "tata percentage starting point")
+
+  /** @group getParam */
+  def getbasicDataPerventage: Double = $(basicDataPercentage)
+
+  setDefault(basicDataPercentage -> 0.0)
+
+
+
+  /**
+    * skipped SH session in hyperband
+    * Default: 0, skip no session
+    *
+    * @group param
+    */
+  val skipSH: IntParam = new IntParam(this, "skipSH",
+    "number of session to be skiped in hyperband (if any)", ParamValidators.inRange(0, 2))
+
+  /** @group getParam */
+  def getskipSH: Int = $(skipSH)
+
+  setDefault(skipSH -> 0)
+
+
   /**
     * log file path
     *
@@ -85,6 +118,19 @@ trait HyperbandParams extends ValidatorParams {
 
   setDefault(logToFile -> false)
 
+
+
+  /**
+    * should i do random split per class
+    *
+    * @group param
+    */
+  val SplitbyClass: BooleanParam = new BooleanParam(this, "SplitbyClass"," should i do random split per class")
+
+  /** @group getParam */
+  def getSplitbyClass: Boolean = $(SplitbyClass)
+
+  setDefault(SplitbyClass -> false)
 
 
 
@@ -194,12 +240,18 @@ class Hyperband (@Since("1.5.0") override val uid: String)
   @Since("2.3.0")
   def setmaxTime(value: Long): this.type = set(maxTime, value)
 
+  @Since("2.3.0")
+  def setskipSH(value: Int): this.type = set(skipSH, value)
+
+  def setSplitbyClass(value:Boolean) : this.type = set(SplitbyClass,value)
+
+  def setbasicDataPercentage(value:Double) : this.type = set(basicDataPercentage , value)
+
   /**
     * check if timeout or not
     * @return
     */
-  def IsTimeOut(): Boolean =
-  {
+  def IsTimeOut(): Boolean =  {
     if ( getRemainingTime() == 0)
       return true
     else
@@ -210,8 +262,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     * get remaining time
     * @return
     */
-  def getRemainingTime(): Long =
-  {
+  def getRemainingTime(): Long =  {
     var rem:Long = ($(maxTime) * 1000) - (new Date().getTime - StartingTime.getTime())
     if (rem < 0)
       rem = 0
@@ -268,6 +319,8 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     */
   def hyberband (dataset: Dataset[_]  ):ListMap[ParamMap, (Double,Model[_])] = {
 
+    //println("Number of partations:(hyberband) " + dataset.rdd.getNumPartitions)
+
     // properities of hyperband
     val eeta = $(eta)
     val max_Resource = $(maxResource)
@@ -289,7 +342,9 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     // loop (number of successive halving, with different number of hyper-parameters configurations)
     // incearsing number of configuration mean decreasing the resource per each configuration
     var time_out = false
-    for( s <- s_max-1 to 0 by -1) {
+    // s_max- skipSH to remove the first n loop from hyperband session
+
+    for( s <- ( s_max-$(skipSH) ) to 0 by -1) {
       if (!IsTimeOut()) {
 
         //initial number of configurations
@@ -526,8 +581,9 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       val Array(trainingDataset, validationDataset) =
         dataset.randomSplit(Array(0.8, 0.2), $(seed))
 
-      val Array(partation, restofdata) =
-        trainingDataset.randomSplit(Array(r / 100, 1 - (r / 100)), $(seed))
+      //val Array(partation, restofdata) =  trainingDataset.randomSplit(Array(r / 100, 1 - (r / 100)), $(seed))
+
+      val partation =  RandomSplitByClassValues( trainingDataset , r / 100 , $(SplitbyClass))
 
       // cache data
       trainingDataset.cache()
@@ -536,56 +592,82 @@ class Hyperband (@Since("1.5.0") override val uid: String)
      //Map to save the result
       var iterResultMap = collection.mutable.Map[Int, (Double,Model[_],ParamMap) ]()
 
+      /*
+      val ParamStep = $(parallelism)
+      var RemainingParamCount = 0
+      var curParamNumber = 0
+      var p = param
+      var Index = 0
+      RemainingParamCount = p.size
+      var parametercount = 0
 
-      // Fit models in a Future for training in parallel
-        val metricFutures = param.map { case (paramIndex ,paramMap ) =>
-        Future[Double] {
-          if( ! IsTimeOut()) {
-            val model = est.fit(partation, paramMap).asInstanceOf[Model[_]]
-            val metric = eval.evaluate(model.transform(validationDataset, paramMap))
+      while ( RemainingParamCount > 0 && !IsTimeOut() ) {
 
-            if ($(ClassifierName) == "RandomForestClassifier")
-              iterResultMap += (paramIndex -> (metric, model.asInstanceOf[RandomForestClassificationModel], paramMap))
-            else if ($(ClassifierName) == "LogisticRegression")
-              iterResultMap += (paramIndex -> (metric, model.asInstanceOf[LogisticRegressionModel], paramMap))
-            else if ($(ClassifierName) == "DecisionTreeClassifier")
-              iterResultMap += (paramIndex -> (metric, model.asInstanceOf[DecisionTreeClassificationModel], paramMap))
-            else if ($(ClassifierName) == "MultilayerPerceptronClassifier")
-              iterResultMap += (paramIndex -> (metric, model.asInstanceOf[MultilayerPerceptronClassificationModel], paramMap))
-            else if ($(ClassifierName) == "LinearSVC")
-              iterResultMap += (paramIndex -> (metric, model.asInstanceOf[LinearSVCModel], paramMap))
-            else if ($(ClassifierName) == "NaiveBayes")
-              iterResultMap += (paramIndex -> (metric, model.asInstanceOf[NaiveBayesModel], paramMap))
-            else if ($(ClassifierName) == "GBTClassifier")
-              iterResultMap += (paramIndex -> (metric, model.asInstanceOf[GBTClassificationModel], paramMap))
-            else if ($(ClassifierName) == "LDA")
-              iterResultMap += (paramIndex -> (metric, model.asInstanceOf[LDAModel], paramMap))
-            else
-              iterResultMap += (paramIndex -> (metric, model.asInstanceOf[QDAModel], paramMap))
+        // check if there is enough parameters in the array
+        if (RemainingParamCount > ParamStep) {
+          parametercount = ParamStep
+          RemainingParamCount = RemainingParamCount - ParamStep
+        }
+        else {
+          parametercount = RemainingParamCount
+          RemainingParamCount = 0
+        }
+        var arr = new Array[ParamMap](ParamStep)
+        for( i <- 0 until  parametercount)
+        {
+          arr(i) = p.values.toList(i + Index)
+        }
+        Index = Index + parametercount
+*/
+        // Fit models in a Future for training in parallel
+        val metricFutures = param.map { case ( paramIndex , paramMap) =>
+          Future[Double] {
+            if (!IsTimeOut()) {
+              //val paramIndex:Int = 1
+              val model = est.fit(partation, paramMap).asInstanceOf[Model[_]]
+              val metric = eval.evaluate(model.transform(validationDataset, paramMap))
 
-            metric
-          }else {
-            0.0
-          }
+              if ($(ClassifierName) == "RandomForestClassifier")
+                iterResultMap += (paramIndex -> (metric, model.asInstanceOf[RandomForestClassificationModel], paramMap))
+              else if ($(ClassifierName) == "LogisticRegression")
+                iterResultMap += (paramIndex -> (metric, model.asInstanceOf[LogisticRegressionModel], paramMap))
+              else if ($(ClassifierName) == "DecisionTreeClassifier")
+                iterResultMap += (paramIndex -> (metric, model.asInstanceOf[DecisionTreeClassificationModel], paramMap))
+              else if ($(ClassifierName) == "MultilayerPerceptronClassifier")
+                iterResultMap += (paramIndex -> (metric, model.asInstanceOf[MultilayerPerceptronClassificationModel], paramMap))
+              else if ($(ClassifierName) == "LinearSVC")
+                iterResultMap += (paramIndex -> (metric, model.asInstanceOf[LinearSVCModel], paramMap))
+              else if ($(ClassifierName) == "NaiveBayes")
+                iterResultMap += (paramIndex -> (metric, model.asInstanceOf[NaiveBayesModel], paramMap))
+              else if ($(ClassifierName) == "GBTClassifier")
+                iterResultMap += (paramIndex -> (metric, model.asInstanceOf[GBTClassificationModel], paramMap))
+              else if ($(ClassifierName) == "LDA")
+                iterResultMap += (paramIndex -> (metric, model.asInstanceOf[LDAModel], paramMap))
+              else
+                iterResultMap += (paramIndex -> (metric, model.asInstanceOf[QDAModel], paramMap))
 
-        }(executionContext)
-      }
-      import scala.concurrent.duration._
+              metric
+            } else {
+              0.0
+            }
 
-      val duration = Duration(getRemainingTime(), MILLISECONDS)
+          }(executionContext)
+        }
+        import scala.concurrent.duration._
+        val duration = Duration(getRemainingTime(), MILLISECONDS)
 
-      // Wait for all metrics to be calculated
-      try {
-        //println(" (remaining Time1:" + getRemainingTime() + ")")
-        val metrics = metricFutures.map(ThreadUtils.awaitResult(_, duration))
-      }catch
-       {
+        // Wait for all metrics to be calculated
+        try {
+          //println(" (remaining Time1:" + getRemainingTime() + ")")
+          val metrics = metricFutures.map(ThreadUtils.awaitResult(_, duration))
+          //println("    -- iteration" + Index)
+        } catch {
 
-          case ex:Exception => //println("(remaining Time2:" + getRemainingTime() +")")
-                               println("      -->(TimeOut...)" )//+ex.getMessage)
-       }
+          case ex: Exception => //println("(remaining Time2:" + getRemainingTime() +")")
+            println("      -->(TimeOut...)") //+ex.getMessage)
+        }
 
-
+      //}
        var sortedIterResultMap =
        if(iterResultMap.size > 0 ) {
          if (eval.isLargerBetter)
@@ -619,7 +701,43 @@ class Hyperband (@Since("1.5.0") override val uid: String)
   }
 
 
+  def RandomSplitByClassValues(dataset: Dataset[_] , Percentage: Double , SplitbyClass:Boolean = false): Dataset[_] =  {
+    var bdf: DataFrame = null
 
+    var Percentage_updated = Percentage + $(basicDataPercentage)
+    if (Percentage_updated > 1.0)
+      Percentage_updated = 1.0
+
+    val StartTime = new java.util.Date().getTime
+     if (Percentage_updated > 0.75 || !SplitbyClass)
+      {
+        val Array(result, restofdata) =  dataset.randomSplit(Array(Percentage_updated, 1 - Percentage_updated), $(seed))
+        bdf = result.toDF()
+      }
+      else
+      {
+        var labelValues = dataset.select("y").distinct.collect.flatMap(_.toSeq)
+        var byLabelValuesArray = labelValues.map(lv => dataset.toDF().where("y ==" + lv))
+
+        for (ii <- 0 to labelValues.size - 1) {
+          //println("loop:" + ii)
+          var Array(result, unwanted) = byLabelValuesArray(ii).randomSplit(Array(Percentage_updated, 1 - Percentage_updated), $(seed))
+          if (ii == 0) {
+            bdf = result
+            //println("Iter:" + ii + "  , Count:" + bdf.count)
+          }
+          else {
+            bdf = bdf.union(result)
+            //println("Iter:" + ii + "  , Count:" + bdf.count)
+          }
+        }
+      }
+
+    val Endtime = new java.util.Date().getTime
+    val TotalTime = Endtime - StartTime
+    //println("      ->split for: "+ Percentage + ", time:" + TotalTime/1000.0)
+    return bdf
+  }
 
   @Since("1.5.0")
   override def transformSchema(schema: StructType): StructType = transformSchemaImpl(schema)

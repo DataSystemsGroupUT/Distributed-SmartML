@@ -35,6 +35,9 @@ class ModelSelector (spark:SparkSession,
                      ScaleData:Boolean = true  ,
                      TryNClassifier:Int = 6 ,
                      HPOptimizer:Int = 2,
+                     skip_SH:Int = 0,
+                     SplitbyClass:Boolean = false,
+                     basicDataPercentage:Double = 0,
                      var HP_MaxTime:Long = 100000) {
 
 
@@ -122,13 +125,13 @@ class ModelSelector (spark:SparkSession,
 
     }
   */
-    for (time <- Array(100,300,600,1800)) {
+    //for (time <-  Array(100,200,300)) { //Array(100,300,600,1800)) {
       try {
 
-        HP_MaxTime = time
+        //HP_MaxTime = time
         //println("     === Time:" + HP_MaxTime)
         StartingTime = new Date()
-        x = HyperParametersOpt(mydataset, selectedClassifiers, kbmgr, ClassifierMgr, time) //HP_MaxTime.toInt)
+        x = HyperParametersOpt(mydataset, selectedClassifiers, kbmgr, ClassifierMgr, HP_MaxTime.toInt)//HP_MaxTime.toInt)
       }
     catch
     {
@@ -137,7 +140,7 @@ class ModelSelector (spark:SparkSession,
         //logger.close()
     }
       //logger.close()
-  }
+  //}
     logger.close()
     return x
   }
@@ -176,6 +179,9 @@ class ModelSelector (spark:SparkSession,
         hb.setParallelism(Parallelism)
         hb.setClassifierName(classifier)
         hb.setmaxTime(HP_MaxTime)
+        hb.setskipSH(skip_SH)
+        hb.setSplitbyClass(SplitbyClass)
+        hb.setbasicDataPercentage(basicDataPercentage)
         hb.filelog = logger
         //hb.ClassifierParamsMapIndexed = ClassifierMgr.ClassifierParamsMapIndexed(classifier)
         hb.ClassifiersMgr = ClassifierMgr
