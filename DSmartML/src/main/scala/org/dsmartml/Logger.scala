@@ -69,7 +69,7 @@ class Logger(path:String) extends java.io.Serializable {
   //output
   val file5: File = new File(path+outfile)
   if(!file5.exists()) {
-    println( file5 + " file not exist")
+    println( file5 + " file does not exist")
     File.createTempFile(path + outfile, "txt")
     println( file5 + " file Created")
   }
