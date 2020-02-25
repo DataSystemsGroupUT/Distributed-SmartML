@@ -89,7 +89,7 @@ class ModelSelector (spark:SparkSession,
     val selectedClassifiers = kbmgr.PredictBestClassifiers(df)
 
     // Create Classifiers Manager
-    val ClassifierMgr = new ClassifiersManager(spark, kbmgr._metadata.nr_features, kbmgr._metadata.nr_classes, seed = seed.toInt)
+    val ClassifierMgr = new ClassifiersManager(spark, kbmgr._metadata.nr_features, kbmgr._metadata.nr_classes, label = TargetCol, seed = seed.toInt)
 
     //prepare dataset by converting to Vector Assembly & Scale it (if needed)
     var mydataset = df

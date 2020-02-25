@@ -15,10 +15,5 @@ retrieveManaged := true
 //mainClass in (Compile, packageBin) := Some("org.dsmartml.examples.App_Example")
 //mainClass in (Compile, run) := Some("org.dsmartml.examples.App_Example")
 mainClass in (Compile, run) := Some("org.dsmartml.Run_Main")
-mainClass in assembly := Some("org.dsmartml.Run_Main")
 
 
-assemblyMergeStrategy in assembly := {
- case PathList("META-INF", xs @ _*) => MergeStrategy.discard
- case x => MergeStrategy.first
-}

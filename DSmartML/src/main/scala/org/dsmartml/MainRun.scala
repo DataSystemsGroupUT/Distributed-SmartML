@@ -31,24 +31,25 @@ object Run_Main {
     //=================================================================
     var dataPath = "/home/ubuntu/scala/data/"
     var logingpath = "/home/ubuntu/scala/logs/"
-    //val fileName = args(0)
-    val fileName = "blood.csv"
+    val fileName = args(0)
+    val time = args(1).toInt
+    //val fileName = "blood.csv"
     // type (Grid Search, TransmogrifAI, Random Search, DSmart ML)
 
     // Read Data (from CSV file)
     //=================================================================
-    var label = "b"
+    var label = "class"
     var rawdata = spark.read.option("header",true)
                             .option("inferSchema","true")
                             .option("delimiter", ",")
                             .format("csv")
-                            .load(dataPath + fileName)
+                            .load(fileName)
     rawdata = rawdata.withColumnRenamed("_c10" , label)
 
     // Find Best Model (Using DSmart ML Library)
     //=================================================================
     var mselector = new ModelSelector(spark, TargetCol = label,
-                                      logpath = logingpath, HP_MaxTime = 100,
+                                      logpath = logingpath, HP_MaxTime = time,
                                       HPOptimizer = 2)
     var res = mselector.getBestModel(rawdata)
     spark.stop()
