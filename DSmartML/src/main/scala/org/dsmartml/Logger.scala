@@ -77,8 +77,15 @@ class Logger(path:String) extends java.io.Serializable {
   
   //Adding this for tracking of last run, using same format as for outputs log
   val result_name = "last_results.txt"
+
   File.createTempFile(path + result_name, "txt")
-  val pw6 = new PrintWriter(new FileOutputStream(path + result_name , true))
+  val file6: File = new File(path + result_name)
+  if(file6.exists()) {
+    file6.delete()
+  }
+  File.createTempFile(path + result_name, "txt")
+  val pw6 = new PrintWriter(new FileOutputStream(file6 , true))
+
 
 
   /**
