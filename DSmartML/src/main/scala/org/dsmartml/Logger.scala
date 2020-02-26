@@ -74,6 +74,11 @@ class Logger(path:String) extends java.io.Serializable {
     println( file5 + " file Created")
   }
   val pw5 = new PrintWriter(new FileOutputStream(file5 , true))
+  
+  //Adding this for tracking of last run, using same format as for outputs log
+  val result_name = "last_results.txt"
+  File.createTempFile(path + result_name, "txt")
+  val pw6 = new PrintWriter(new FileOutputStream(path + result_name , true))
 
 
   /**
@@ -118,6 +123,15 @@ class Logger(path:String) extends java.io.Serializable {
     pw5.append(s)
   }
 
+
+  /**
+    * Log information in the KB file
+    * @param s information to be logged
+    */
+  def logLastResult(s:String)= {
+    pw6.append(s)
+  }
+
   /**
     * Close File Writer
     */
@@ -127,6 +141,7 @@ class Logger(path:String) extends java.io.Serializable {
     //pw3.close()
     //pw4.close()
     pw5.close()
+    pw6.close()
   }
 
   /**

@@ -400,6 +400,7 @@ class ModelSelector (spark:SparkSession,
           val TotalTime1 = Endtime1 - starttime1
           println("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "%")
           logger.logOutput("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "%\n")
+          logger.logLastResult("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "%\n")
 
           }
           else

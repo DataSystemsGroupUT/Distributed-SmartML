@@ -38,12 +38,12 @@ object Run_Main {
 
     // Read Data (from CSV file)
     //=================================================================
-    var label = "class"
+    var label = "b"
     var rawdata = spark.read.option("header",true)
                             .option("inferSchema","true")
                             .option("delimiter", ",")
                             .format("csv")
-                            .load(fileName)
+                            .load(dataPath+fileName)
     rawdata = rawdata.withColumnRenamed("_c10" , label)
 
     // Find Best Model (Using DSmart ML Library)

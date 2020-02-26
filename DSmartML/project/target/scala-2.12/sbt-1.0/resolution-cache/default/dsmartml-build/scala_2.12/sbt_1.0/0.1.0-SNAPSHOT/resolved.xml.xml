@@ -4,7 +4,7 @@
 		module="dsmartml-build"
 		revision="0.1.0-SNAPSHOT"
 		status="integration"
-		publication="20200225142921"
+		publication="20200225162255"
 		e:sbtVersion="1.0" e:scalaVersion="2.12"
 	>
 		<description>
