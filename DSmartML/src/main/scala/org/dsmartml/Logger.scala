@@ -69,11 +69,23 @@ class Logger(path:String) extends java.io.Serializable {
   //output
   val file5: File = new File(path+outfile)
   if(!file5.exists()) {
-    println( file5 + " file not exist")
+    println( file5 + " file does not exist")
     File.createTempFile(path + outfile, "txt")
     println( file5 + " file Created")
   }
   val pw5 = new PrintWriter(new FileOutputStream(file5 , true))
+
+  //Adding this for tracking of last run, using same format as for outputs log
+  val result_name = "last_results.txt"
+
+  File.createTempFile(path + result_name, "txt")
+  val file6: File = new File(path + result_name)
+  if(file6.exists()) {
+    file6.delete()
+  }
+  File.createTempFile(path + result_name, "txt")
+  val pw6 = new PrintWriter(new FileOutputStream(file6 , true))
+
 
 
   /**
@@ -118,6 +130,16 @@ class Logger(path:String) extends java.io.Serializable {
     pw5.append(s)
   }
 
+
+  /**
+    * Log information in the KB file
+    * @param s information to be logged
+    */
+  def logLastResult(s:String)= {
+    pw6.append(s)
+  }
+
+
   /**
     * Close File Writer
     */
@@ -127,6 +149,8 @@ class Logger(path:String) extends java.io.Serializable {
     //pw3.close()
     //pw4.close()
     pw5.close()
+    pw6.close()
+
   }
 
   /**

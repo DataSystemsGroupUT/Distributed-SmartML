@@ -89,7 +89,9 @@ class ModelSelector (spark:SparkSession,
     val selectedClassifiers = kbmgr.PredictBestClassifiers(df)
 
     // Create Classifiers Manager
+
     val ClassifierMgr = new ClassifiersManager(spark, kbmgr._metadata.nr_features, kbmgr._metadata.nr_classes, seed = seed.toInt)
+    val ClassifierMgr = new ClassifiersManager(spark, kbmgr._metadata.nr_features, kbmgr._metadata.nr_classes, label = TargetCol, seed = seed.toInt)
 
     //prepare dataset by converting to Vector Assembly & Scale it (if needed)
     var mydataset = df
@@ -400,6 +402,8 @@ class ModelSelector (spark:SparkSession,
           val TotalTime1 = Endtime1 - starttime1
           println("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "%")
           logger.logOutput("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "%\n")
+
+          logger.logLastResult("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "Params "+ selectedParamMap.toString()  + "%\n")
 
           }
           else

@@ -12,4 +12,8 @@ libraryDependencies ++= Seq(
   "org.apache.spark" % "spark-mllib_2.11" % "2.3.0")
 
 
+//retrieveManaged := true
+//mainClass in (Compile, run) := Some("org.dsmartml.Run_Main")
+
+
 
