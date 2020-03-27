@@ -33,7 +33,7 @@ object App_GetBestModel {
 
     // Dataset
     val i = args(0).toInt
-    // type (Grid Search, TransmogrifAI, Random Search, DSmart ML)
+    // type ( 1:Random Search, 2:Hyperband, 3:Bayesian Opt, 5:Grid Search, )
     val j = args(1).toInt
     // Time Limit
     val t = args(2).toInt
@@ -68,26 +68,13 @@ object App_GetBestModel {
 
     //Create Logger Instance
     var logger = new Logger(logpath)
+    var Classifiers = "RandomForestClassifier,LogisticRegression,DecisionTreeClassifier,MultilayerPerceptronClassifier,LinearSVC,NaiveBayes,GBTClassifier,LDA,QDA"
 
-
-      // Load Dataset
-      var dataloader = new DataLoader(spark, i, dataFolderPath, logger)
-      var rawdata = dataloader.getData()
+    // Load Dataset
+    var dataloader = new DataLoader(spark, i, dataFolderPath, logger)
+    var rawdata = dataloader.getData()
 
     println("Number of partations(after loading): " + rawdata.rdd.getNumPartitions)
-
-    println(MetadataManager.getNumberofClasses(rawdata, TargetCol))
-    println(MetadataManager.getNumberofFeatures(rawdata, TargetCol))
-    print(MetadataManager.hasNegativeFeatures(rawdata, TargetCol))
-
-
-
-    var Classifiers = "RandomForestClassifier,LogisticRegression,DecisionTreeClassifier"
-    var selectedClassifiers: ListBuffer[Int] = new ListBuffer[Int]()
-    println(Classifiers.split(","))
-
-
-
     try{
 
       // get best Model for this dataset using Distributed SmartML Library
@@ -134,10 +121,8 @@ object App_GetBestModel {
     }
     catch{
       case ex:Exception => println(ex.getMessage)
-        //                         logger.logOutput("Exception: " + ex.getMessage)
-        logger.close()
+      logger.close()
     }
-    //println("Model summary:\n" + model.summaryPretty())
     logger.close()
   }
 
