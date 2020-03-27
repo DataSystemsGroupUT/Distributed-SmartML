@@ -3,12 +3,15 @@ package org.dsmartml
 
 import java.text.DecimalFormat
 import java.util.Date
+
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.classification._
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.dsmartml.knowledgeBase.KBManager
+
+import scala.collection.mutable.ListBuffer
 
 /**
   * Class Name: Logger
@@ -38,7 +41,8 @@ class ModelSelector (spark:SparkSession,
                      skip_SH:Int = 0,
                      SplitbyClass:Boolean = false,
                      basicDataPercentage:Double = 0,
-                     var HP_MaxTime:Long = 100000) {
+                     var HP_MaxTime:Long = 100000,
+                     Classifiers: String = "") {
 
 
 
@@ -48,7 +52,18 @@ class ModelSelector (spark:SparkSession,
   val fm2d = new DecimalFormat("###.##")
   val fm4d = new DecimalFormat("###.####")
   var logger = new Logger(logpath)
-
+  var nr_Features = 0
+  var nr_Classes = 0
+  var hasNegativeValues = false
+  var selectedClassifiers: ListBuffer[Int] = new ListBuffer[Int]()
+  //Classifiers.split(",").foreach(c =>selectedClassifiers.append(ClassifiersManager.classifiersLsit.indexOf(c)))
+  Classifiers.split(",").foreach(
+    c => {
+      var i: Int = ClassifiersManager.classifiersLsit.indexOf(c)
+      if (i >= 0)
+        selectedClassifiers.append(i)
+    }
+  )
   /**
     * check if timeout or not
     * @return
@@ -82,15 +97,26 @@ class ModelSelector (spark:SparkSession,
     logger.printHeader(HPOptimizer, HP_MaxTime, Parallelism, eta, maxResourcePercentage, MaxRandomSearchParam,seed)
     logger.logHeader(HPOptimizer, HP_MaxTime, Parallelism, eta, maxResourcePercentage, MaxRandomSearchParam,seed)
 
-    // Creare Knowlegdebase Manager
-    var kbmgr = new KBManager(spark, logger, TargetCol)
+    if( selectedClassifiers.size < 1) {
+      // Creare Knowlegdebase Manager
+      var kbmgr = new KBManager(spark, logger, TargetCol)
+      // Get Best Algorithms based on the Knowledgebase
+      selectedClassifiers = kbmgr.PredictBestClassifiers(df).to[ListBuffer]
+      // get Dataset info
+      nr_Features = kbmgr._metadata.nr_features
+      nr_Classes = kbmgr._metadata.nr_classes
+      hasNegativeValues = kbmgr._metadata.hasNegativeFeatures
 
-    // Get Best Algorithms based on the Knowledgebase
-    val selectedClassifiers = kbmgr.PredictBestClassifiers(df)
+    }
+    else
+      {
+        nr_Features = MetadataManager.getNumberofFeatures(df, TargetCol)
+        nr_Classes  = MetadataManager.getNumberofClasses(df, TargetCol)
+        hasNegativeValues =  MetadataManager.hasNegativeFeatures(df, TargetCol)
+      }
 
     // Create Classifiers Manager
-
-    val ClassifierMgr = new ClassifiersManager(spark, kbmgr._metadata.nr_features, kbmgr._metadata.nr_classes, label = TargetCol, seed = seed.toInt)
+    val ClassifierMgr = new ClassifiersManager(spark, nr_Features, nr_Classes, seed = seed.toInt)
 
     //prepare dataset by converting to Vector Assembly & Scale it (if needed)
     var mydataset = df
@@ -126,14 +152,16 @@ class ModelSelector (spark:SparkSession,
 
     }
   */
-    //for (time <-  Array(100,200,300)) { //Array(100,300,600,1800)) {
-      try {
+    //for(time <-  Array(100,300,600,1800)) { //Array(100,300,600,1800)) {
 
-        //HP_MaxTime = time
-        //println("     === Time:" + HP_MaxTime)
+    try {
         StartingTime = new Date()
-        x = HyperParametersOpt(mydataset, selectedClassifiers, kbmgr, ClassifierMgr, HP_MaxTime.toInt)//HP_MaxTime.toInt)
-      }
+        //HP_MaxTime = time
+        x = HyperParametersOpt(mydataset, selectedClassifiers.toList,  ClassifierMgr, HP_MaxTime.toInt)
+
+
+        //println("     === Time:" + HP_MaxTime)
+       }
     catch
     {
       case ex: Exception => println(ex.getMessage)
@@ -212,7 +240,7 @@ class ModelSelector (spark:SparkSession,
         return null
     }
       //random Search
-      else if (HPOptimizer == 2) {
+    else if (HPOptimizer == 2) {
         //println("3 - Random Search")
         val rs = new org.apache.spark.ml.tuning.RandomSearch()
         rs.StartingTime = StartingTime
@@ -254,7 +282,57 @@ class ModelSelector (spark:SparkSession,
         else
           return null
       }
+
+    else if (HPOptimizer == 3) {
+      //println("3 - Random Search")
+      val bo = new org.apache.spark.ml.tuning.BayesianOpt()
+      bo.StartingTime = StartingTime
+      if (!IsTimeOut()) {
+        //println(" ------>Remaining time" + rs.getRemainingTime())
+        bo.setEvaluator(ClassifierMgr.evaluator)
+        bo.setEstimator(ClassifierMgr.ClassifiersMap(classifier))
+        bo.setmaxResource(maxResourcePercentage)
+        bo.setLogFilePath("/home/sshuser/result.txt")
+        bo.setLogToFile(false)
+        bo.setCollectSubModels(false)
+        bo.setParallelism(Parallelism)
+        bo.setClassifierName(classifier)
+        bo.setmaxTime(HP_MaxTime)
+        bo.setTargetColumn(TargetCol)
+        bo.filelog = logger
+        bo.spark = spark
+        bo.ClassifiersMgr = ClassifierMgr
+        bo.setEstimatorParamMaps(ClassifierMgr.ClassifierParamsMap(classifier))
+        bo.setinitialParamNumber(5)
+        bo.setbayesianStepsNumber(15)
+        bo.setinitialDataPercentage(0.05)
+        bo.setbayesianStepDataPercentage(0.05)
+        println("   -- Start Bayesian Opt. for " + classifier)
+        val model = bo.fit(mydataset)
+        if (classifier == "RandomForestClassifier")
+          return (bo.bestParam, bo.bestmetric, bo.bestModel.asInstanceOf[RandomForestClassificationModel])
+        else if (classifier == "LogisticRegression")
+          return (bo.bestParam, bo.bestmetric, bo.bestModel.asInstanceOf[LogisticRegressionModel])
+        else if (classifier== "DecisionTreeClassifier")
+          return (bo.bestParam, bo.bestmetric, bo.bestModel.asInstanceOf[DecisionTreeClassificationModel])
+        else if (classifier == "MultilayerPerceptronClassifier")
+          return (bo.bestParam, bo.bestmetric, bo.bestModel.asInstanceOf[MultilayerPerceptronClassificationModel])
+        else if (classifier == "LinearSVC")
+          return (bo.bestParam, bo.bestmetric, bo.bestModel.asInstanceOf[LinearSVCModel])
+        else if (classifier == "NaiveBayes")
+          return (bo.bestParam, bo.bestmetric, bo.bestModel.asInstanceOf[NaiveBayesModel])
+        else if (classifier == "GBTClassifier")
+          return (bo.bestParam, bo.bestmetric, bo.bestModel.asInstanceOf[GBTClassificationModel])
+        else if (classifier == "LDA")
+          return (bo.bestParam, bo.bestmetric, bo.bestModel.asInstanceOf[LDAModel])
+        else
+          return (bo.bestParam, bo.bestmetric, bo.bestModel.asInstanceOf[QDAModel])
+      }
       else
+        return null
+    }
+
+    else
         return null
   }
 
@@ -267,7 +345,7 @@ class ModelSelector (spark:SparkSession,
     * @param t
     * @return
     */
-  def HyperParametersOpt(mydataset:DataFrame , selectedClassifiers:List[Int] , kbmgr:KBManager ,ClassifierMgr:ClassifiersManager, t:Int ): (String, ( Model[_] , ParamMap , Double)) = {
+  def HyperParametersOpt(mydataset:DataFrame , selectedClassifiers:List[Int]  ,ClassifierMgr:ClassifiersManager, t:Int ): (String, ( Model[_] , ParamMap , Double)) = {
 
     // starting time for optimization
     val StartTime = new java.util.Date().getTime
@@ -294,20 +372,25 @@ class ModelSelector (spark:SparkSession,
       println("3 - Hyper-parameters Optimization using Random Search with Time budget (" + HP_MaxTime +") Second.")
       logger.logOutput("3 - Hyper-parameters Optimization using Random Search with Time budget (" + HP_MaxTime +") Second.\n")
     }
+    else if(HPOptimizer == 3) {
+      println("3 - Hyper-parameters Optimization using Bayesian Opt. with Time budget (" + HP_MaxTime +") Second.")
+      logger.logOutput("3 - Hyper-parameters Optimization using Bayesian Opt. with Time budget (" + HP_MaxTime +") Second.\n")
+    }
+
 
     //StartingTime= new Date()
     for( i <- selectedClassifiers) {
 
-      if (  ((kbmgr._metadata.nr_classes == 2 && Array(4, 6).contains(i))
+      if (  ((nr_Classes == 2 && Array(4, 6).contains(i))
                 ||
-            (kbmgr._metadata.nr_classes >= 2 && Array(0, 1, 2, 3).contains(i))
+            (nr_Classes >= 2 && Array(0, 1, 2, 3).contains(i))
                ||
-            (kbmgr._metadata.hasNegativeFeatures == false && i == 5))
+            (hasNegativeValues == false && i == 5))
               &&
              !IsTimeOut()
       ) {
 
-        try {
+       // try {
           val starttime1 = new java.util.Date().getTime
           var classifier = ClassifiersManager.classifiersLsit(i) // ClassifiersManager.classifiersOrderLsit(i.toInt)
           var result = getAlgorithmBestModel(trainingData_MinMaxScaled, ClassifierMgr, classifier, StartingTime)
@@ -399,23 +482,21 @@ class ModelSelector (spark:SparkSession,
 
           val Endtime1 = new java.util.Date().getTime
           val TotalTime1 = Endtime1 - starttime1
-          println("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "%")
-          logger.logOutput("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "%\n")
-
-          logger.logLastResult("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "Params "+ selectedParamMap.toString()  + "%\n")
+          println("   -- Optimization for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "%")
+          logger.logOutput("   -- Optimization for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy) + "%\n")
 
           }
           else
             {
               val Endtime1 = new java.util.Date().getTime
               val TotalTime1 = Endtime1 - starttime1
-              println("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: 0.00%")
-              logger.logOutput("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: 0.00%\n")
+              println("   -- Optimization for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: 0.00%")
+              logger.logOutput("   -- Optimization for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: 0.00%\n")
 
             }
-        } catch {
-          case ex: Exception => println("-- Hyper-Param  Optimization Exception :" + ex.getMessage)
-        }
+        //} catch {
+        //  case ex: Exception => println("-- Hyper-Param  Optimization Exception :" + ex.getMessage)
+        //}
       }
 
       // For LDA
@@ -453,10 +534,10 @@ class ModelSelector (spark:SparkSession,
 
           val Endtime1 = new java.util.Date().getTime
           val TotalTime1 = Endtime1 - starttime1
-          println("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy_lda) + "%")
-          logger.logOutput("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy_lda) + "%\n")
+          println("   -- Optimization for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy_lda) + "%")
+          logger.logOutput("   -- Optimization for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ") Accuracy: " + fm4d.format(100 * accuracy_lda) + "%\n")
         } catch {
-          case ex: Exception => println("-- Hyperband for algoritm: LDA Exception " + ex.getMessage)
+          case ex: Exception => println("-- Optimization for algoritm: LDA Exception " + ex.getMessage)
         }
       }
 
@@ -494,10 +575,10 @@ class ModelSelector (spark:SparkSession,
 
           val Endtime1 = new java.util.Date().getTime
           val TotalTime1 = Endtime1 - starttime1
-          println("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ")  Accuracy: " + fm4d.format(100 * accuracy_qda) + "%" )
-          logger.logOutput("   -- Hyperband for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ")  Accuracy: " + fm4d.format(100 * accuracy_qda) + "%\n")
+          println("   -- Optimization for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ")  Accuracy: " + fm4d.format(100 * accuracy_qda) + "%" )
+          logger.logOutput("   -- Optimization for algoritm:" + classifier + " (Time:" + (TotalTime1 / 1000.0).toString + ")  Accuracy: " + fm4d.format(100 * accuracy_qda) + "%\n")
         } catch {
-          case ex: Exception => println("-- Hyperband for algoritm: QDA Exception " + ex.getMessage)
+          case ex: Exception => println("-- Optimization for algoritm: QDA Exception " + ex.getMessage)
 
         }
       }

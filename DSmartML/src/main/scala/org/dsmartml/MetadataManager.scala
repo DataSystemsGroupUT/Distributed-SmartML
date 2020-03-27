@@ -42,6 +42,8 @@ class MetadataManager (spark:SparkSession,logger: Logger, TargetCol:String = "y"
     return metadata
   }
 
+
+
   /**
     * this function Extract Statistical Metadata from dataset
     * @param rawdata the input dataset that we need to extract its  metadata
@@ -1029,5 +1031,60 @@ object MetadataManager
 
 
   }
+
+  def getNumberofFeatures(df:DataFrame , TargetCol:String): Int =
+  {
+    var features: Array[String] = df.columns.filter(c => c != TargetCol)
+    return features.length
+  }
+
+  def getNumberofClasses(df:DataFrame , TargetCol:String): Int =
+  {
+     return df.groupBy(TargetCol).count().collect().toList.size
+  }
+
+  def hasNegativeFeatures(df:DataFrame , TargetCol:String): Boolean =
+  {
+    var ColumnMinValMap = Map[String, Double]()
+    var MinValueRow : Row = null
+    var currcol: Array[String] = null
+    var columncounter = 0
+    val iterationcolumns = 200
+    var features: Array[String] = df.columns.filter(c => c != TargetCol)
+    var l = features.size / iterationcolumns
+
+    var result = false
+    for ( c <- features) {
+      if(!result) {
+        var count = df.filter(col(c) < 0).count()
+        if (count > 0)
+          result= true
+      }
+    }
+    return result
+   /*
+    for (c <- 0 to l)
+    {
+
+      currcol = features.slice(c * iterationcolumns, (c * iterationcolumns) + (iterationcolumns))
+      if (currcol.length > 0 ) {
+
+        MinValueRow = df.select(currcol.map(c => min(col(c)).alias(c)): _*).collect()(0)
+        for (cc <- currcol) {
+            ColumnMinValMap += (cc -> MinValueRow(columncounter).asInstanceOf[Number].doubleValue())
+            columncounter = columncounter + 1
+        }
+        columncounter = 0
+        //println(" 100 Features Loop Number:" + c)
+      }
+
+    }
+    if (ColumnMinValMap.values.toArray.filter(d => d < 0).length > 0)
+      return true
+    else
+      return false
+    */
+  }
+
 
 }

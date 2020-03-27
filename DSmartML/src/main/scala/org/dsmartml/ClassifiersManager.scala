@@ -215,6 +215,8 @@ class ClassifiersManager(spark:SparkSession, nr_features:Int , nr_classes:Int, l
   //---------------------------------------------------------------------
 
 
+
+  // parameters for Random Search & Hyperband
   val numTrees_dist = Poisson(60)(setSeed(seed)).sample(3)
   val maxDepth_dist = Poisson(12)(setSeed(seed)).sample(10)
   val minInfoGain_dist = Array(0.001, 0.01 , 0.1 ) //Gamma(1.5,0.1)(setSeed(seed)).sample(3)
@@ -228,6 +230,21 @@ class ClassifiersManager(spark:SparkSession, nr_features:Int , nr_classes:Int, l
   val standardization_dist = Array(true,false)
   val tol_dist = Array(1E-6)
   val smoothing_dist =  Array(1.0 , 0.9, 0.8, 0.7, 0.5 , 0.3, 0.1, 0.05)
+
+  // parameters for Bayesian Opt
+  val numTrees_dist_b = Poisson(60)(setSeed(seed)).sample(10)
+  val maxDepth_dist_b = Poisson(12)(setSeed(seed)).sample(10)
+  val minInfoGain_dist_b = Array(0.001, 0.005 ,0.01 , 0.05,  0.1, 0.5 ) //Gamma(1.5,0.1)(setSeed(seed)).sample(3)
+  val impurity_dist_b    = Array("gini")
+  val maxBins_dist_b =  Array(4 , 8, 16, 24, 32 , 64 , 96)
+  val minInstancesPerNode_dist_b= Array(1, 5, 10)
+  val regParam_dist_b = Gamma(0.5,0.1 )(setSeed(seed)).sample(10)
+  val elasticNetParam_dist_b = Gamma(0.5,0.1)(setSeed(seed)).sample(10)
+  val maxIter_dist_b = Poisson(30)(setSeed(seed)).sample(10)
+  val fitIntercept_dist_b =  Array(true,false)
+  val standardization_dist_b = Array(true,false)
+  val tol_dist_b = Array(1E-6 , 1E-5 , 1E-4)
+  val smoothing_dist_b =  Array(1.0 , 0.9, 0.8, 0.7, 0.6, 0.5 , 0.4, 0.3,0.2, 0.1, 0.05)
 
   /**
     * generate parameters for certain classifier, the generated parameters are in the form
@@ -440,6 +457,219 @@ class ClassifiersManager(spark:SparkSession, nr_features:Int , nr_classes:Int, l
     }
     return ClassifierParamsMapIndexed(classifier)
   }
+
+
+
+  def generateParametersForBayesianOpt( classifier:String):ListBuffer[ParamMap] = {
+
+    //var ClassifierParamsMapIndexed =  Map[ String,Map[Int,ParamMap] ]()
+    var ClassifierParamsMapIndexed =  Map[ String, ListBuffer[ParamMap] ]()
+    var ParamMapList = new ListBuffer[ParamMap]()
+    classifier match {
+      case "RandomForestClassifier" =>
+        var rf_counter = 0
+        var rf_indexedParamMapArr = Map[Int,ParamMap]()
+        for( i <- numTrees_dist_b )
+        {
+          for(j <- maxDepth_dist_b)
+          {
+            for (k <- maxBins_dist_b)
+            {
+              for ( l <- minInfoGain_dist_b)
+              {
+                for(m <- impurity_dist_b)
+                {
+                  for(n <- minInstancesPerNode_dist_b)
+                  {
+                    var pm = new ParamMap()
+                    pm.put(rf.numTrees, i)
+                    pm.put(rf.maxDepth, j)
+                    pm.put(rf.maxBins, k)
+                    pm.put(rf.minInfoGain, l)
+                    pm.put(rf.impurity, m)
+                    pm.put(rf.minInstancesPerNode, n)
+                    rf_indexedParamMapArr += (rf_counter -> pm)
+                    ParamMapList += pm
+                    rf_counter = rf_counter + 1
+                  }
+                }
+              }
+            }
+          }
+        }
+        //ClassifierParamsMapIndexed += ("RandomForestClassifier" -> rf_indexedParamMapArr)
+        ClassifierParamsMapIndexed += ("RandomForestClassifier" -> ParamMapList)
+
+      case  "LogisticRegression" =>
+        var lr_counter = 0
+        var lr_indexedParamMapArr = Map[Int,ParamMap]()
+        for( i <- fitIntercept_dist_b )
+        {
+          for(j <- maxIter_dist_b)
+          {
+            for (k <- regParam_dist_b)
+            {
+              for ( l <- elasticNetParam_dist_b)
+              {
+                for(m <- standardization_dist_b) {
+                  for( n <- tol_dist_b) {
+                    var pm = new ParamMap()
+                    pm.put(lr.fitIntercept, i)
+                    pm.put(lr.maxIter, j)
+                    pm.put(lr.regParam, k)
+                    pm.put(lr.elasticNetParam, l)
+                    pm.put(lr.standardization, m)
+                    pm.put(lr.tol, n)
+                    lr_indexedParamMapArr += (lr_counter -> pm)
+                    ParamMapList += pm
+                    lr_counter = lr_counter + 1
+                  }
+                }
+              }
+            }
+          }
+        }
+        //ClassifierParamsMapIndexed += ("LogisticRegression" -> lr_indexedParamMapArr)
+        ClassifierParamsMapIndexed += ("LogisticRegression" -> ParamMapList)
+
+      case "DecisionTreeClassifier" =>
+        var dt_counter = 0
+        var dt_indexedParamMapArr = Map[Int,ParamMap]()
+        for( i <-maxDepth_dist_b )
+        {
+          for(j <- maxBins_dist_b)
+          {
+            for (k <- minInfoGain_dist_b)
+            {
+              for ( l <- impurity_dist_b)
+              {
+                for(m <- minInstancesPerNode_dist_b) {
+                  var pm = new ParamMap()
+                  pm.put(dt.maxDepth, i)
+                  pm.put(dt.maxBins, j)
+                  pm.put(dt.minInfoGain, k)
+                  pm.put(dt.impurity, l)
+                  pm.put(dt.minInstancesPerNode, m)
+                  dt_indexedParamMapArr += (dt_counter -> pm)
+                  ParamMapList += pm
+                  dt_counter = dt_counter + 1
+                }
+              }
+            }
+          }
+        }
+        //ClassifierParamsMapIndexed += ("DecisionTreeClassifier" -> dt_indexedParamMapArr)
+        ClassifierParamsMapIndexed += ("DecisionTreeClassifier" -> ParamMapList)
+
+      case "MultilayerPerceptronClassifier" =>
+        var mpr_counter = 0
+        var mpr_indexedParamMapArr = Map[Int,ParamMap]()
+        for( i <-Array(
+          Array(nr_features,2,nr_classes),
+          Array(nr_features,3,nr_classes),
+          Array(nr_features,4,nr_classes),
+          Array(nr_features,5,nr_classes),
+          Array(nr_features,6,nr_classes),
+          Array(nr_features,7,nr_classes),
+          Array(nr_features,8,nr_classes),
+          Array(nr_features,9,nr_classes),
+          Array(nr_features,10,nr_classes),
+          Array(nr_features,11,nr_classes),
+          Array(nr_features,12,nr_classes),
+          Array(nr_features,13,nr_classes)
+        )
+        )
+        {
+          for(j <- maxIter_dist_b)
+          {
+            var pm = new ParamMap()
+            pm.put(mpr.layers, i)
+            pm.put(mpr.maxIter, j)
+            mpr_indexedParamMapArr += (mpr_counter -> pm)
+            ParamMapList += pm
+            mpr_counter = mpr_counter + 1
+          }
+        }
+        //ClassifierParamsMapIndexed += ("MultilayerPerceptronClassifier" -> mpr_indexedParamMapArr)
+        ClassifierParamsMapIndexed += ("MultilayerPerceptronClassifier" -> ParamMapList)
+
+      case "LinearSVC" =>
+        var lsvc_counter = 0
+        var lsvc_indexedParamMapArr = Map[Int,ParamMap]()
+        for( i <-maxIter_dist_b )
+        {
+          for(j <- regParam_dist_b)
+          {
+            var pm = new ParamMap()
+            pm.put(lsvc.maxIter, i)
+            pm.put(lsvc.regParam, j)
+            lsvc_indexedParamMapArr += (lsvc_counter -> pm)
+            ParamMapList += pm
+            lsvc_counter = lsvc_counter + 1
+          }
+        }
+        //ClassifierParamsMapIndexed += ("LinearSVC" -> lsvc_indexedParamMapArr)
+        ClassifierParamsMapIndexed += ("LinearSVC" -> ParamMapList)
+
+
+      case "NaiveBayes" =>
+        var nb_counter = 0
+        var nb_indexedParamMapArr = Map[Int,ParamMap]()
+        for( i <- smoothing_dist_b )
+        {
+          var pm = new ParamMap()
+          pm.put(nb.smoothing, i)
+          nb_indexedParamMapArr += (nb_counter -> pm)
+          ParamMapList += pm
+          nb_counter = nb_counter + 1
+        }
+        //ClassifierParamsMapIndexed += ("NaiveBayes" -> nb_indexedParamMapArr)
+        ClassifierParamsMapIndexed += ("NaiveBayes" -> ParamMapList)
+
+      case "GBTClassifier" =>
+        var gbt_counter = 0
+        var gbt_indexedParamMapArr = Map[Int,ParamMap]()
+        for( i <-maxDepth_dist_b )
+        {
+          for(j <- minInfoGain_dist_b)
+          {
+            for (k <- minInstancesPerNode_dist_b)
+            {
+              for( l <- maxBins_dist_b) {
+                var pm = new ParamMap()
+                pm.put(gbt.maxDepth, i)
+                pm.put(gbt.minInfoGain, j)
+                pm.put(gbt.minInstancesPerNode, k)
+                pm.put(gbt.maxBins, l)
+                gbt_indexedParamMapArr += (gbt_counter -> pm)
+                ParamMapList += pm
+                gbt_counter = gbt_counter + 1
+              }
+            }
+          }
+        }
+        //ClassifierParamsMapIndexed += ("GBTClassifier" -> gbt_indexedParamMapArr)
+        ClassifierParamsMapIndexed += ("GBTClassifier" -> ParamMapList)
+
+      case "LDA" =>
+        var pm = new ParamMap()
+        pm.put(lda.scaledData ,false)
+        ParamMapList += pm
+        //ClassifierParamsMapIndexed += ("LDA" -> Map(1 -> new ParamMap().put(lda.scaledData ,false)  ))
+        ClassifierParamsMapIndexed += ("LDA" -> ParamMapList )
+
+      case "QDA" =>
+        var pm = new ParamMap()
+        pm.put(lda.scaledData ,false)
+        ParamMapList += pm
+        //ClassifierParamsMapIndexed += ("LDA" -> Map(1 -> new ParamMap().put(lda.scaledData ,false)  ))
+        ClassifierParamsMapIndexed += ("QDA" -> ParamMapList )
+
+    }
+    return ClassifierParamsMapIndexed(classifier)
+  }
+
+
   def generateParametersFromDistribution( classifier:String):ListBuffer[ParamMap] = {
 
     //var ClassifierParamsMapIndexed =  Map[ String,Map[Int,ParamMap] ]()

@@ -1345,6 +1345,16 @@ object DataLoader{
     return mydataset
   }
 
+  def convertDFtoVecAssembly_WithoutLabel(df:DataFrame, featureCol:String): DataFrame =
+  {
+    val featurecolumns = df.columns
+    val assembler = new VectorAssembler()
+      .setInputCols(featurecolumns)
+      .setOutputCol(featureCol)
+    var mydataset = assembler.transform(df.na.drop).select(featureCol)
+    return mydataset
+  }
+
   /**
     * This Function Scale dataframe features using Min-Max Scaler
     * @param df input dataframe

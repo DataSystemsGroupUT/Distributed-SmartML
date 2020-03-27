@@ -76,13 +76,23 @@ object App_GetBestModel {
 
     println("Number of partations(after loading): " + rawdata.rdd.getNumPartitions)
 
+    println(MetadataManager.getNumberofClasses(rawdata, TargetCol))
+    println(MetadataManager.getNumberofFeatures(rawdata, TargetCol))
+    print(MetadataManager.hasNegativeFeatures(rawdata, TargetCol))
+
+
+
+    var Classifiers = "RandomForestClassifier,LogisticRegression,DecisionTreeClassifier"
+    var selectedClassifiers: ListBuffer[Int] = new ListBuffer[Int]()
+    println(Classifiers.split(","))
+
 
 
     try{
 
       // get best Model for this dataset using Distributed SmartML Library
       //===================================================================================
-      if (j == 1 || j == 2 ) {
+      if (j == 1 || j == 2 || j == 3) {
         //for (ti <- Array(20,40,60,80,100) ){
         try {
           var mselector = new ModelSelector(  spark,
@@ -93,7 +103,8 @@ object App_GetBestModel {
                                               HPOptimizer = j,
                                               skip_SH = skip_SH,
                                               SplitbyClass = SplitbyClass,
-                                              basicDataPercentage = basicDataPercentage
+                                              basicDataPercentage = basicDataPercentage ,
+                                              Classifiers = Classifiers
                                             )
           var res = mselector.getBestModel(rawdata)
         }
@@ -104,7 +115,7 @@ object App_GetBestModel {
 
       // Grid Search
       //===================================================================================
-      if (j == 3) {
+      if (j == 5) {
         println("Grid Search")
         val starttime2 = new java.util.Date().getTime
         logger.logOutput("============= Grid Search============================================= \n")
