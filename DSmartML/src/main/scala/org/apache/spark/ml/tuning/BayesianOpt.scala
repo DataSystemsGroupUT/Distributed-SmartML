@@ -47,8 +47,6 @@ trait BayesianOptParams extends ValidatorParams {
   setDefault(maxResource -> 1)
 
 
-
-
   /**
     * log file path
     *
@@ -147,9 +145,6 @@ trait BayesianOptParams extends ValidatorParams {
   def getbayesianStepDataPercentage: Double = $(bayesianStepDataPercentage)
   setDefault(bayesianStepDataPercentage -> 0.5)
 
-
-
-
   /**
     * Target Column name
     *
@@ -162,6 +157,16 @@ trait BayesianOptParams extends ValidatorParams {
 
 }
 
+
+/**
+  * Description: this calss represent Bayesian Opt (using Random Fores Regression)
+  * implementation & it support parallelism & some sort of Hyperband by allocating
+  * more resource (train on more data) for each step
+  * @constructor Create a Bayesian Opt Object all us to do Bayesian optimization
+  * @author Ahmed Eissa
+  * @version 1.0
+  * @Date 10/3/2020
+  */
 class BayesianOpt (@Since("1.5.0") override val uid: String)
   extends Estimator[BayesianOptModel]
     with BayesianOptParams with HasParallelism with HasCollectSubModels
@@ -185,7 +190,6 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("tvs"))
 
-
   /** @group setParam */
   @Since("1.5.0")
   def setEstimator(value: Estimator[_]): this.type = set(estimator, value)
@@ -197,7 +201,6 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
   /** @group setParam */
   @Since("1.5.0")
   def setEvaluator(value: Evaluator): this.type = set(evaluator, value)
-
 
   /** @group setParam */
   @Since("1.5.0")
@@ -283,23 +286,24 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
       transformSchema(schema, logging = true)
 
 
-      // 2- get All Random Parameters for this classifier
+      // get All Random Parameters for this classifier
       var AllparamMapList = ClassifiersMgr.generateParametersForBayesianOpt($(ClassifierName) ) //"RandomForestClassifier")
 
+      // Convert all the parameters to List of (ParamMap, Accuracy, Model)
       var AllParamMapAccLst = new ListBuffer[ (ParamMap , Double , Model[_])]()
       AllparamMapList.foreach( e => AllParamMapAccLst.append( (e,1,null) ))
 
-      //Allparam_df = convertParamtoDF_withoutAccuracy(spark, AllparamMapList , "RandomForestClassifier")
+      // Convert All Parameters List to Dataframe
       Allparam_df = convertParamtoDF(spark, AllParamMapAccLst , true, $(ClassifierName))
+
+      // Convert the parameters Dataframe to Vector Assembly format (without label, only parametes)
       Allparam_df = DataLoader.convertDFtoVecAssembly_WithoutLabel( Allparam_df , "features" )
 
-      // 3- Get initial Configuration
+      // select n initial Configuration (randomly)
       //-------------------------------------------------------------------------------
       val count = AllparamMapList.length;
       import scala.util.Random
       val rand = new Random($(paramSeed))
-      //println($(paramSeed))
-      //println("====>")
       val numberOfElements = $(initialParamNumber)
       var i = 0
       while ( i < numberOfElements)
@@ -311,6 +315,9 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
         i += 1
       }
 
+      // do initial training n times for n random hyperparameters
+      //  then loop to do sequentail training for the selected parameters
+      //----------------------------------------------------------------------------
       if (!IsTimeOut()) {
         BayeisanInitialStep(dataset.toDF(), $(ClassifierName), ClassifiersMgr)
         for (i <- 1 to $(bayesianStepsNumber)) {
@@ -320,8 +327,10 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
         }
       }
 
-      //val res = hyberband(dataset)
 
+      // Get best Hyperparameters, Model and Accuracy and set the class properities
+      // also return Bayesian Model
+      //----------------------------------------------------------------------------
       if(ParamMapAccuracyLst.size > 0) {
         // get the best parameters returned by the BayesianOpt
         var bestParam: ParamMap = ParamMapAccuracyLst.sortWith(_._2 > _._2)(0)._1
@@ -363,6 +372,16 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
   @Since("2.0.0")
   override def write: MLWriter = new BayesianOpt.BayesianOptWriter(this)
 
+  /**
+    * This function convert List of ParamMap to Dataframe with column for each param
+    * it can also add a label column or not based on the parameter "WithoutLable"
+    * this parameter represent the accuracy of the hyperparameters
+    * @param spark
+    * @param paramMapList
+    * @param WithoutLabel
+    * @param Classifier
+    * @return
+    */
   def convertParamtoDF(spark:SparkSession,paramMapList:ListBuffer[(ParamMap, Double, Model[_])], WithoutLabel:Boolean , Classifier:String): DataFrame =
   {
     import spark.implicits._
@@ -567,13 +586,31 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
 
   }
 
-
+  /**
+    * this function represent the initial step, it train n models based on n number of
+    * hyperparamters config selected randomly.
+    * this function call Learn function to do parallel training for the selected algorithm
+    * @param df
+    * @param classifierName
+    * @param classifiermgr
+    */
   def BayeisanInitialStep(df:DataFrame , classifierName:String,  classifiermgr:ClassifiersManager): Unit =
   {
     learn(df, paramMapList.toList, classifierName , classifiermgr)
   }
 
-  def learn(dataset: Dataset[_], paramLst: List[ParamMap] , ClassifierName:String , ClassifierMgr:ClassifiersManager): ListBuffer[(ParamMap, Double, Model[_])] = {
+  /**
+    * this function train an algorithm for each Parameter Map in the parameter map list
+    * it do that on a fraction of the data (initialDataPercentage)
+    * it return list item for each training run (PAramMap, Accuracy and the model itself)
+    * @param dataset
+    * @param paramLst
+    * @param ClassifierName
+    * @param ClassifierMgr
+    * @return
+    */
+  def learn(dataset: Dataset[_], paramLst: List[ParamMap] , ClassifierName:String , ClassifierMgr:ClassifiersManager): ListBuffer[(ParamMap, Double, Model[_])] =
+  {
     try{
     var datapercent = $(initialDataPercentage)
     var result = new ListBuffer[(ParamMap, Double, Model[_])]()
@@ -632,38 +669,7 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
         println("      -->(TimeOut...)") //+ex.getMessage)
     }
 
-    /*
-    for (param <- paramLst) {
-      var model = rf.fit(trainingDataset, param).asInstanceOf[Model[_]]
-      val predictions = model.transform(validationDataset)
-      val evaluator = ClassifierMgr.evaluator
-      val accuracy = evaluator.evaluate(predictions)
-      if(ClassifierName == "RandomForestClassifier")
-        result.append((param, accuracy , model.asInstanceOf[RandomForestClassificationModel]))
-      if(ClassifierName == "LogisticRegression")
-        result.append((param, accuracy , model.asInstanceOf[LogisticRegressionModel]))
-      if(ClassifierName == "DecisionTreeClassifier")
-        result.append((param, accuracy , model.asInstanceOf[DecisionTreeClassificationModel]))
-      if( ClassifierName == "GBTClassifier")
-        result.append((param, accuracy , model.asInstanceOf[GBTClassificationModel]))
-      if( ClassifierName == "LinearSVC")
-        result.append((param, accuracy , model.asInstanceOf[LinearSVCModel]))
-      if( ClassifierName == "MultilayerPerceptronClassifier")
-        result.append((param, accuracy , model.asInstanceOf[MultilayerPerceptronClassificationModel]))
 
-      //println("Learned:")
-      //println(printParamMap(param))
-      println("      - Initial Random Search (on " + formatter.format(datapercent * 100) + "% of the Data),  Acc:" + formatter.format(accuracy * 100) + "%")
-      //println("--------------------------------")
-    }
-    try {
-    }
-    catch
-      {
-        case ex:Exception =>
-          print("Exception")
-      }
-      */
     } catch {
       case ex: Exception =>
         println("Exception (Hyperband - " + ClassifierName + "- learn): " + ex.getMessage)
@@ -674,6 +680,11 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
 
   }
 
+  /**
+    * helper function to allow us to print Parameter Map
+    * @param pm
+    * @return
+    */
   def printParamMap( pm:ParamMap): String =
   {
     var result = ""
@@ -685,60 +696,66 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
     return result
   }
 
+  /**
+    * this function do the following
+    * 1- get all the tested Hyperparameters + their accuracy and convert them to DF
+    * 2- convert this Dataframe to Vector Assembly Format
+    * 3- train a regression model on that Datafram
+    * 4- use the regression model to select the next paramter    *
+    * @param spark
+    * @param df_data
+    * @param classifiermgr
+    * @param step
+    * @param classifier
+    */
   def BayeisanStep(spark:SparkSession , df_data:DataFrame, classifiermgr:ClassifiersManager , step:Int, classifier:String = "RandomForestClassifier"): Unit =
   {
-    //println("start Bayesian Step:" + (step) )
-    //println("---------------------")
     //convert result to DF
     var rdf = convertParamtoDF(spark,ParamMapAccuracyLst , false,classifier)
 
     // convert Result to Assembler
     var bdf = DataLoader.convertDFtoVecAssembly( rdf , "features" , "Label")
 
-
-    //Call Regession
+    //Build Regession Model
     val m = learnRegression(bdf)
 
+    //Determine the next hyperparameter configuration
     getNextParameters(m, Allparam_df, df_data , step, classifiermgr,classifier)
-
-    //println(ParamMapAccuracyLst)
-    //println("-----------------------------------------------------------------------------")
   }
 
-  def learnRegression(df:DataFrame): RandomForestRegressionModel = {
-
-    //println("Start learnRegression")
-    /*val lr = new LinearRegression()
-      .setMaxIter(10)
-      .setRegParam(0.3)
-      .setElasticNetParam(0.8)*/
-
+  /**
+    * this function build a regression Model based on the paramters configuration
+    * and their accuracy
+    * the dataframe here is the hyperparameter + accuracy
+    * @param df
+    * @return
+    */
+  def learnRegression(df:DataFrame): RandomForestRegressionModel =
+  {
     val rf = new RandomForestRegressor()
       .setLabelCol("Label")
       .setFeaturesCol("features")
-
-    //val Array(training_Param, validation_Param) = df.randomSplit(Array(0.8, 0.2), 1234)
-
-
-    //val model = rf.fit(training_Param)
     val model = rf.fit(df)
-
-    //var predictions = model.transform(validation_Param)
-    //println("predicted")
-    //val evaluator = new RegressionEvaluator()
-    //  .setLabelCol("Label")
-    //  .setPredictionCol("prediction")
-    //  .setMetricName("rmse")
-    //val rmse = evaluator.evaluate(predictions)
-    //println("Regresssion Model root mean square error:" + rmse)
-    //println("End learnRegression")
     return model
   }
 
+  /**
+    * this function do the following:
+    * 1- use the regression model to predict the accuracy for each Hyperparameter
+    * 2- select best hyperparameter (based on the expected Accuracy)
+    * 3 - check if i tried this hyperparameter configuration before (if yes i should get another one)
+    * 4- convert the selected hyperparameter to ParamMap
+    * 5- train the classifier based on the selected hyperparam and add the result to a
+    * global list "ParamMapAccuracyLst"
+    * @param model
+    * @param df_Param
+    * @param df_data
+    * @param step
+    * @param classifiermgr
+    * @param ClassifierName
+    */
   def getNextParameters(model:RandomForestRegressionModel , df_Param:DataFrame , df_data:DataFrame , step:Int, classifiermgr:ClassifiersManager , ClassifierName:String )
   {
-    //println("Start getNextParameters")
-
     var exist = false
     var accuracy = 0.0
     var acc = 0.0
@@ -747,37 +764,26 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
     var predicted_Param_accu = predictions.orderBy(desc("prediction")).collect().toList
     var currentVector: org.apache.spark.ml.linalg.DenseVector = null
 
-
     breakable {
       for (i <- 0 to predicted_Param_accu.size - 1) {
         exist = false
         var currentParam = predicted_Param_accu(i)(0).asInstanceOf[org.apache.spark.ml.linalg.DenseVector]
-        //nextParamMap = predicted_Param_accu(i)(0).asInstanceOf[org.apache.spark.ml.linalg.DenseVector].toArray
-        //acc = predicted_Param_accu(0)(1).asInstanceOf[Double]
-
         ParamMapAccuracyLst.foreach(e => {
           exist=  compareRowtoParamMap(currentParam ,e._1 , ClassifierName )
         })
         if(! exist) {
-          //println("Not Exist")
-          //nextParamMap = currentParam.toArray
           currentVector = currentParam
           acc = predicted_Param_accu(i)(1).asInstanceOf[Double]
           break
         }
       }
     }
-    //logger.close()
 
     println( "Selected Paramters: " + currentVector.toArray.toList + " expected accuracy:" + acc)
     var pm = convertVectortoParamMap(currentVector ,ClassifierName)
 
     var res = singleLearn(df_data, pm, step, ClassifierName, classifiermgr)
     accuracy = res._2
-
-    //var paramMapList_ = new ListBuffer[ParamMap]()
-    //paramMapList_.append(pm)
-    //accuracy = learn(df_data, paramMapList_.toList ,ClassifierName, classifiermgr  ).take(1).toList(0)._2
 
     if(ClassifierName == "RandomForestClassifier")
       ParamMapAccuracyLst.append( (pm ,accuracy ,res._3.asInstanceOf[RandomForestClassificationModel]))
@@ -792,14 +798,18 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
     if(ClassifierName == "MultilayerPerceptronClassifier")
       ParamMapAccuracyLst.append( (pm ,accuracy ,res._3.asInstanceOf[MultilayerPerceptronClassificationModel]))
 
-
     ParamMapAccuracyLst.append( (pm ,accuracy ,null ) )
 
   }
 
+  /**
+    * this function convert Vector of parameters to ParamMap (based on the classifier)
+    * @param inputVector
+    * @param ClassifierName
+    * @return
+    */
   def convertVectortoParamMap(inputVector:org.apache.spark.ml.linalg.DenseVector , ClassifierName:String): ParamMap =
   {
-    //println("Start convertVectortoParamMap")
     var pm = new ParamMap()
     var currentParam = inputVector.toArray
     if (ClassifierName == "RandomForestClassifier") {
@@ -902,9 +912,17 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
 
     return pm
   }
+
+  /**
+    * compare Vector of parameter against PAramMap
+    * i used this function to check if i used this hyperparameter before or not
+    * @param inputVector
+    * @param pm
+    * @param ClassifierName
+    * @return
+    */
   def compareRowtoParamMap(inputVector:org.apache.spark.ml.linalg.DenseVector , pm:ParamMap, ClassifierName:String ): Boolean =
   {
-    //println("Start compareRowtoParamMap")
     var currentParam = inputVector.toArray
     var result = false
     if (ClassifierName == "RandomForestClassifier") {
@@ -1098,6 +1116,15 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
 
   }
 
+  /**
+    * Train classifier on a percentage of data based on the sent ParamMap
+    * @param df_data
+    * @param paramMap
+    * @param step
+    * @param ClassifierName
+    * @param ClassifierMgr
+    * @return
+    */
   def singleLearn(df_data: Dataset[_], paramMap:ParamMap , step:Int, ClassifierName:String , ClassifierMgr:ClassifiersManager ): (ParamMap, Double, Model[_]) =
   {
     //println("Start singleLearn")
@@ -1146,6 +1173,12 @@ try {
 
   }
 
+  /**
+    * Create a classifier object using the sent parameter Map
+    * @param paramMap
+    * @param ClassifierName
+    * @return
+    */
   def createClassifier(paramMap:ParamMap , ClassifierName:String): Estimator[_] =
   {
     //println("Start createClassifier")
@@ -1217,8 +1250,6 @@ try {
         .setStandardization(standardization)
         .setTol(tol)
       estimator = lr
-      //println("fitIntercept:" + fitIntercept + ", maxIter:" + maxIter + " ,:regParam" + regParam +
-       // " ,:elasticNetParam" + elasticNetParam + " ,:standardization" + standardization + ",:tol" + tol)
     }
 
     if( ClassifierName == "DecisionTreeClassifier") {
@@ -1247,7 +1278,6 @@ try {
         .setMaxDepth(maxDepth)
         .setMaxBins(maxBins)
       estimator = dt
-      //println("minInstancesPerNode:" + minInstancesPerNode + ", minInfoGain:" + minInfoGain + " ,:setMaxDepth" + maxDepth + " ,:maxBins" + maxBins)
 
     }
 
@@ -1278,8 +1308,6 @@ try {
         .setMaxDepth(maxDepth)
         .setMaxBins(maxBins)
       estimator = gbt
-      //println("minInstancesPerNode:" + minInstancesPerNode + ", minInfoGain:" + minInfoGain + " ,:setMaxDepth" + maxDepth + " ,:maxBins" + maxBins)
-
 
     }
 
@@ -1300,7 +1328,7 @@ try {
         .setMaxIter(maxIter)
         .setRegParam(regParam)
       estimator = svc
-      //println("maxIter:" + maxIter + " ,:regParam" + regParam )
+
     }
 
     if ( ClassifierName == "MultilayerPerceptronClassifier")  {
@@ -1320,7 +1348,6 @@ try {
         .setMaxIter(maxIter)
         .setLayers(Layers)
       estimator = mlp
-      //println("maxIter:" + maxIter + " ,:Layers" + Layers.toSeq )
     }
 
     return estimator
@@ -1328,7 +1355,9 @@ try {
 
 }
 
-
+/**
+  *
+  */
 object BayesianOpt extends MLReadable[BayesianOpt] {
 
   @Since("2.0.0")
