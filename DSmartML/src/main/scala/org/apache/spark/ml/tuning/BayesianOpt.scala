@@ -33,62 +33,6 @@ import scala.util.control.Breaks.{break, breakable}
   * Parameters for [[BayesianOpt]] and [[BayesianOptModel]].
   */
 trait BayesianOptParams extends ValidatorParams {
-  /**
-    * the maximum amount of resource that can
-    * be allocated to a single configuration
-    * Default: 1
-    *
-    * @group param
-    */
-  val maxResource: IntParam = new IntParam(this, "maxResource",
-    "the maximum amount of resource that can\nbe allocated to a single configuration", ParamValidators.inRange(1, 100))
-  /** @group getParam */
-  def getMaxResource: Double = $(maxResource)
-  setDefault(maxResource -> 1)
-
-
-  /**
-    * log file path
-    *
-    * @group param
-    */
-  val logFilePath: Param[String] = new Param[String](this, "logFilePath","Log to File path")
-  /** @group getParam */
-  def getLogFilePath: String = $(logFilePath)
-  setDefault(logFilePath -> "/home")
-
-  /**
-    * should i log to file
-    *
-    * @group param
-    */
-  val logToFile: BooleanParam = new BooleanParam(this, "logToFile"," should i Log to File")
-  /** @group getParam */
-  def getLogToFile: Boolean = $(logToFile)
-  setDefault(logToFile -> false)
-
-  /**
-    * Classifier Name
-    *
-    * @group param
-    */
-  val ClassifierName: Param[String] = new Param[String](this, "logFilePath","Log to File path")
-  /** @group getParam */
-  def getclassifiername: String = $(ClassifierName)
-  setDefault(ClassifierName -> "RandomForest")
-
-  /**
-    * the maximum Time allowed for BayesianOpt on this algorithm
-    * Default: Inf
-    *
-    * @group param
-    */
-  val maxTime: LongParam = new LongParam(this, "maxTime",
-    "the maximum amount of Time (in seconds) that can\nbe allocated to BayesianOpt algorithm")
-  /** @group getParam */
-  def getmaxTime: Double = $(maxTime)
-  setDefault(maxTime -> 60 * 10) // 10 minutes
-
 
   val paramSeed: IntParam = new IntParam(this, "paramSeed",
     "the seed number of random parameters", ParamValidators.inRange(1, 10000))
@@ -145,16 +89,6 @@ trait BayesianOptParams extends ValidatorParams {
   def getbayesianStepDataPercentage: Double = $(bayesianStepDataPercentage)
   setDefault(bayesianStepDataPercentage -> 0.5)
 
-  /**
-    * Target Column name
-    *
-    * @group param
-    */
-  val TargetColumn: Param[String] = new Param[String](this, "TargetColumn","Target Column name")
-  /** @group getParam */
-  def getTargetColumn: String = $(TargetColumn)
-  setDefault(TargetColumn -> "y")
-
 }
 
 
@@ -171,6 +105,7 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
   extends Estimator[BayesianOptModel]
     with BayesianOptParams with HasParallelism with HasCollectSubModels
     with OptimizerResult
+    with CommonParams
     with MLWritable with Logging{
 
 
@@ -243,31 +178,6 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
   @Since("2.3.0")
   def setparamSeed(value: Int): this.type = set(paramSeed, value)
 
-
-  /**
-    * check if timeout or not
-    * @return
-    */
-  def IsTimeOut(): Boolean =  {
-    if ( getRemainingTime() == 0)
-      return true
-    else
-      return false
-  }
-
-  /**
-    * get remaining time
-    * @return
-    */
-  def getRemainingTime(): Long =  {
-    var rem:Long = ($(maxTime) * 1000) - (new Date().getTime - StartingTime.getTime())
-    if (rem < 0)
-      rem = 0
-    return rem
-  }
-
-
-
   /**
     * This function Run BayesianOpt Algorithm on the data set to get best algorithm (best hyper parameters)
     * @param dataset the input dataset on which we will run the BayesianOpt
@@ -275,7 +185,7 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
     */
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): BayesianOptModel = {
-    if (!IsTimeOut()) {
+    if (!TuningHelper.IsTimeOut( $(maxTime) , StartingTime)) {
       // properities of BayesianOpt
       val est = $(estimator)
       val eval = $(evaluator)
@@ -318,10 +228,10 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
       // do initial training n times for n random hyperparameters
       //  then loop to do sequentail training for the selected parameters
       //----------------------------------------------------------------------------
-      if (!IsTimeOut()) {
+      if (!TuningHelper.IsTimeOut( $(maxTime) , StartingTime)) {
         BayeisanInitialStep(dataset.toDF(), $(ClassifierName), ClassifiersMgr)
         for (i <- 1 to $(bayesianStepsNumber)) {
-          if (!IsTimeOut()) {
+          if (!TuningHelper.IsTimeOut( $(maxTime) , StartingTime)) {
             BayeisanStep(spark, dataset.toDF(), ClassifiersMgr, i, $(ClassifierName))
           }
         }
@@ -623,7 +533,7 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
     val executionContext = getExecutionContext
     val metricFutures = paramLst.map { case paramMap =>
       Future[Double] {
-        if (!IsTimeOut()) {
+        if (!TuningHelper.IsTimeOut( $(maxTime) , StartingTime)) {
           //val paramIndex:Int = 1
           val model = est.fit(trainingDataset, paramMap).asInstanceOf[Model[_]]
           val metric = eval.evaluate(model.transform(validationDataset, paramMap))
@@ -656,7 +566,8 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
       }(executionContext)
     }
     import scala.concurrent.duration._
-    val duration = Duration(getRemainingTime(), MILLISECONDS)
+
+    val duration = Duration(TuningHelper.getRemainingTime($(maxTime) ,StartingTime), MILLISECONDS)
 
     // Wait for all metrics to be calculated
     try {
@@ -779,7 +690,7 @@ class BayesianOpt (@Since("1.5.0") override val uid: String)
       }
     }
 
-    println( "Selected Paramters: " + currentVector.toArray.toList + " expected accuracy:" + acc)
+    //println( "Selected Paramters: " + currentVector.toArray.toList + " expected accuracy:" + acc)
     var pm = convertVectortoParamMap(currentVector ,ClassifierName)
 
     var res = singleLearn(df_data, pm, step, ClassifierName, classifiermgr)
@@ -1136,9 +1047,9 @@ try {
     val Array(trainingDataset, validationDataset) = df_data.randomSplit(Array(percent, 1- percent), 1234)
     var rf = createClassifier(paramMap , ClassifierName)
 
-    if (!IsTimeOut()) {
+    if (!TuningHelper.IsTimeOut( $(maxTime) , StartingTime)) {
       var rf_model = rf.fit(trainingDataset).asInstanceOf[Model[_]]
-      if (!IsTimeOut()) {
+      if (!TuningHelper.IsTimeOut( $(maxTime) , StartingTime)) {
         val rf_predictions = rf_model.transform(validationDataset)
         val evaluator = ClassifierMgr.evaluator
         accuracy = evaluator.evaluate(rf_predictions)

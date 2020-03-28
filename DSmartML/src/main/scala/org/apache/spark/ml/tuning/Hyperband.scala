@@ -38,42 +38,7 @@ trait HyperbandParams extends ValidatorParams {
 
   /** @group getParam */
   def getEta: Double = $(eta)
-
   setDefault(eta -> 3)
-
-  /**
-    * the maximum amount of resource that can
-    * be allocated to a single configuration
-    * Default: 1
-    *
-    * @group param
-    */
-  val maxResource: IntParam = new IntParam(this, "maxResource",
-    "the maximum amount of resource that can\nbe allocated to a single configuration", ParamValidators.inRange(1, 100))
-
-  /** @group getParam */
-  def getMaxResource: Double = $(maxResource)
-
-  setDefault(maxResource -> 1)
-
-
-
-  /**
-    * data percentage starting point
-    * added to r in each sh iteration
-    * Default: 0
-    *
-    * @group param
-    */
-  val basicDataPercentage: DoubleParam = new DoubleParam(this, "basicDataPerventage",
-    "tata percentage starting point")
-
-  /** @group getParam */
-  def getbasicDataPerventage: Double = $(basicDataPercentage)
-
-  setDefault(basicDataPercentage -> 0.0)
-
-
 
   /**
     * skipped SH session in hyperband
@@ -89,34 +54,6 @@ trait HyperbandParams extends ValidatorParams {
 
   setDefault(skipSH -> 0)
 
-
-  /**
-    * log file path
-    *
-    * @group param
-    */
-  val logFilePath: Param[String] = new Param[String](this, "logFilePath","Log to File path")
-
-  /** @group getParam */
-  def getLogFilePath: String = $(logFilePath)
-
-  setDefault(logFilePath -> "/home")
-
-
-  /**
-    * should i log to file
-    *
-    * @group param
-    */
-  val logToFile: BooleanParam = new BooleanParam(this, "logToFile"," should i Log to File")
-
-  /** @group getParam */
-  def getLogToFile: Boolean = $(logToFile)
-
-  setDefault(logToFile -> false)
-
-
-
   /**
     * should i do random split per class
     *
@@ -129,50 +66,8 @@ trait HyperbandParams extends ValidatorParams {
 
   setDefault(SplitbyClass -> false)
 
-
-
-  /**
-    * Classifier Name
-    *
-    * @group param
-    */
-  val ClassifierName: Param[String] = new Param[String](this, "logFilePath","Log to File path")
-
-  /** @group getParam */
-  def getclassifiername: String = $(ClassifierName)
-  setDefault(ClassifierName -> "RandomForest")
-
-
-
-  /**
-    * the maximum Time allowed for Hyperband on this algorithm
-    * Default: Inf
-    *
-    * @group param
-    */
-  val maxTime: LongParam = new LongParam(this, "maxTime",
-    "the maximum amount of Time (in seconds) that can\nbe allocated to Hyperband algorithm")
-
-  /** @group getParam */
-  def getmaxTime: Double = $(maxTime)
-
-  setDefault(maxTime -> 60 * 10) // 10 minutes
-
-
-
-
 }
 
-
-/**
-  * Parameters for the optimization process result
-  */
-trait OptimizerResult
-{
-  var bestParam :ParamMap = null
-  var bestModel :Model[_] = null
-  var bestmetric :Double = 0.0
-}
 /**
   * Class Name: Hyperband
   * Description: this calss represent hyperband implementation & it support parallelism
@@ -185,6 +80,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
   extends Estimator[HyperbandModel]
     with HyperbandParams with HasParallelism with HasCollectSubModels
     with OptimizerResult
+    with CommonParams
     with MLWritable with Logging {
 
   val fm2d = new DecimalFormat("###.##")
@@ -248,28 +144,8 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
   def setbasicDataPercentage(value:Double) : this.type = set(basicDataPercentage , value)
 
-  /**
-    * check if timeout or not
-    * @return
-    */
-  def IsTimeOut(): Boolean =  {
-    if ( getRemainingTime() == 0)
-      return true
-    else
-      return false
-  }
-
-  /**
-    * get remaining time
-    * @return
-    */
-  def getRemainingTime(): Long =  {
-    var rem:Long = ($(maxTime) * 1000) - (new Date().getTime - StartingTime.getTime())
-    if (rem < 0)
-      rem = 0
-    return rem
-  }
-
+  @Since("2.3.0")
+  def setTargetColumn(value: String): this.type = set(TargetColumn, value)
   /**
     * This function Run Hyperband Algorithm on the data set to get best algorithm (best hyper parameters)
     * @param dataset the input dataset on which we will run the hyperband
@@ -277,7 +153,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     */
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): HyperbandModel = {
-    if (!IsTimeOut()) {
+    if (!TuningHelper.IsTimeOut( $(maxTime) , StartingTime)) {
       // properities of Hyperband
       val est = $(estimator)
       val eval = $(evaluator)
@@ -343,7 +219,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     // s_max- skipSH to remove the first n loop from hyperband session
 
     for( s <- ( s_max-$(skipSH) ) to 0 by -1) {
-      if (!IsTimeOut()) {
+      if (!TuningHelper.IsTimeOut( $(maxTime) , StartingTime)) {
 
         //initial number of configurations
         var tmp = math.ceil((B / max_Resource / (s + 1)))
@@ -449,7 +325,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     for ( i <-  0 to (s ).toInt)
     {
       // if no time out
-      if( !IsTimeOut()) {
+      if( !TuningHelper.IsTimeOut( $(maxTime) , StartingTime)) {
         //Run each of the n_i configs for r_i iterations and keep best n_i/eta (loop)
         var n_i = n * math.pow(eeta, (-i))
         var r_i: Double = r * math.pow(eeta, (i))
@@ -562,7 +438,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
        // Fit models in a Future for training in parallel
        val metricFutures = param.map { case ( paramIndex , paramMap) =>
           Future[Double] {
-            if (!IsTimeOut()) {
+            if (!TuningHelper.IsTimeOut( $(maxTime) , StartingTime)) {
               //val paramIndex:Int = 1
               val model = est.fit(partation, paramMap).asInstanceOf[Model[_]]
               val metric = eval.evaluate(model.transform(validationDataset, paramMap))
@@ -593,8 +469,9 @@ class Hyperband (@Since("1.5.0") override val uid: String)
 
           }(executionContext)
         }
+
         import scala.concurrent.duration._
-        val duration = Duration(getRemainingTime(), MILLISECONDS)
+        val duration = Duration(TuningHelper.getRemainingTime( $(maxTime) , StartingTime), MILLISECONDS)
 
         // Wait for all metrics to be calculated
         try {

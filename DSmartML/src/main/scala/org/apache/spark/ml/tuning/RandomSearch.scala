@@ -40,87 +40,6 @@ trait RandomSearchParams extends ValidatorParams {
 
   setDefault(ParamNumber -> 10)
 
-  /**
-    * the maximum amount of resource that can
-    * be allocated to a single configuration
-    * Default: 1
-    *
-    * @group param
-    */
-  val maxResource: IntParam = new IntParam(this, "maxResource",
-    "the maximum amount of resource that can\nbe allocated to a single configuration", ParamValidators.inRange(1, 100))
-
-  /** @group getParam */
-  def getMaxResource: Int = $(maxResource)
-
-  setDefault(maxResource -> 100)
-
-
-  /**
-    * log file path
-    *
-    * @group param
-    */
-  val logFilePath: Param[String] = new Param[String](this, "logFilePath","Log to File path")
-
-  /** @group getParam */
-  def getLogFilePath: String = $(logFilePath)
-
-  setDefault(logFilePath -> "/home")
-
-  /**
-    * Target Column name
-    *
-    * @group param
-    */
-  val TargetColumn: Param[String] = new Param[String](this, "TargetColumn","Target Column name")
-
-  /** @group getParam */
-  def getTargetColumn: String = $(TargetColumn)
-
-  setDefault(TargetColumn -> "y")
-
-
-  /**
-    * should i log to file
-    *
-    * @group param
-    */
-  val logToFile: BooleanParam = new BooleanParam(this, "logToFile"," should i Log to File")
-
-  /** @group getParam */
-  def getLogToFile: Boolean = $(logToFile)
-
-  setDefault(logToFile -> false)
-
-
-  /**
-    * Classifier Name
-    *
-    * @group param
-    */
-  val ClassifierName: Param[String] = new Param[String](this, "ClassifierName","ClassifierName")
-
-  /** @group getParam */
-  def getclassifiername: String = $(ClassifierName)
-  setDefault(ClassifierName -> "RandomForest")
-
-
-
-  /**
-    * the maximum Time allowed for RandomSearch on this algorithm
-    * Default: Inf
-    *
-    * @group param
-    */
-  val maxTime: LongParam = new LongParam(this, "maxTime",
-    "the maximum amount of Time (in seconds) that can\nbe allocated to RandomSearch algorithm")
-
-  /** @group getParam */
-  def getmaxTime: Double = $(maxTime)
-
-  setDefault(maxTime -> 60 * 10) // 10 minutes
-
 }
 
 /**
@@ -135,6 +54,7 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
   extends Estimator[RandomSearchModel]
     with RandomSearchParams with HasParallelism with HasCollectSubModels
     with OptimizerResult
+    with CommonParams
     with MLWritable with Logging {
 
   val fm2d = new DecimalFormat("###.##")
@@ -145,7 +65,6 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
   var ModelCount = 0
   var ClassifiersMgr: ClassifiersManager = null
   var StartingTime: Date = new Date()
-  val localStartTime : Date = new Date()
   val formatter = java.text.NumberFormat.getInstance
   formatter.setMaximumFractionDigits(2)
 
@@ -168,10 +87,6 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
   /** @group setParam */
   @Since("1.5.0")
   def setEvaluator(value: Evaluator): this.type = set(evaluator, value)
-
-  /** @group setParam */
-  //@Since("1.5.0")
-  //def setParamNumber(value: Integer): this.type = set("ParamNumber", value)
 
   /** @group setParam */
   @Since("1.5.0")
@@ -204,6 +119,7 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
   @Since("2.3.0")
   def setParamNumber(value: Int): this.type = set(ParamNumber, value)
 
+  /*
   /**
     * check if timeout or not
     * @return
@@ -233,7 +149,7 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
   def getElapsedTime():Long ={
     return (new Date().getTime - localStartTime.getTime())
   }
-
+*/
 
   /**
     * This function Run RandomSearch Algorithm on the data set to get best algorithm (best hyper parameters)
@@ -245,7 +161,7 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
   override def fit(dataset: Dataset[_]): RandomSearchModel = {
 
 
-    if (!IsTimeOut()) {
+    if (! TuningHelper.IsTimeOut( $(maxTime) , StartingTime)) {
       val Starttime = new java.util.Date().getTime
 
       val schema = dataset.schema
@@ -347,7 +263,7 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
     else
       RemainingParamCount = p.size
 
-    if (IsTimeOut())
+    if ( TuningHelper.IsTimeOut( $(maxTime) , StartingTime))
       {
         println("     - Time Out.....")
         filelog.logOutput("     - Time Out.....\n")
@@ -355,7 +271,7 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
       else
       {
         // loop and get a group of parameters ( = parallelism) each iteration
-        while ( RemainingParamCount > 0 && !IsTimeOut() ) {
+        while ( RemainingParamCount > 0 && ! TuningHelper.IsTimeOut( $(maxTime) , StartingTime) ) {
 
           // check if there is enough parameters in the array
           if (RemainingParamCount > ParamStep) {
@@ -385,8 +301,9 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
 
             classifer_name = $(ClassifierName)
             bestClassifier = $(ClassifierName)
-            println("     - Best Accuracy after " + (getElapsedTime() / 1000.0).toString +" Seconds and  "+ ModelCount +" Models trained is :" + fm4d.format( 100 * bestaccur ) + "%" )
-            filelog.logOutput("     - Best Accuracy after " + (getElapsedTime() / 1000.0).toString +" Seconds and  "+ ModelCount +" Models trained is :" + bestaccur + "\n")
+
+            println("     - Best Accuracy after " + (TuningHelper.getElapsedTime(StartingTime) / 1000.0).toString +" Seconds and  "+ ModelCount +" Models trained is :" + fm4d.format( 100 * bestaccur ) + "%" )
+            filelog.logOutput("     - Best Accuracy after " + (TuningHelper.getElapsedTime(StartingTime) / 1000.0).toString +" Seconds and  "+ ModelCount +" Models trained is :" + bestaccur + "\n")
           }
         }
 
@@ -480,7 +397,7 @@ class RandomSearch (@Since("1.5.0") override val uid: String)
 
 
       import scala.concurrent.duration._
-      val duration = Duration(getRemainingTime(), MILLISECONDS)
+      val duration = Duration(TuningHelper.getElapsedTime(StartingTime), MILLISECONDS)
 
       // Wait for all metrics to be calculated
       try {
