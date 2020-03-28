@@ -459,7 +459,6 @@ class ClassifiersManager(spark:SparkSession, nr_features:Int , nr_classes:Int, l
   }
 
 
-
   def generateParametersForBayesianOpt( classifier:String):ListBuffer[ParamMap] = {
 
     //var ClassifierParamsMapIndexed =  Map[ String,Map[Int,ParamMap] ]()
@@ -672,7 +671,6 @@ class ClassifiersManager(spark:SparkSession, nr_features:Int , nr_classes:Int, l
 
   def generateParametersFromDistribution( classifier:String):ListBuffer[ParamMap] = {
 
-    //var ClassifierParamsMapIndexed =  Map[ String,Map[Int,ParamMap] ]()
     var ClassifierParamsMapIndexed =  Map[ String, ListBuffer[ParamMap] ]()
     var ParamMapList = new ListBuffer[ParamMap]()
     classifier match {
@@ -924,19 +922,6 @@ class ClassifiersManager(spark:SparkSession, nr_features:Int , nr_classes:Int, l
        }
      }
 
-
-    /*println("====================Selected Parameters============================")
-    var s12 = ""
-    for ( ps <- SelectedParamsMapIndexed) {
-      for (p <- ps._2.toSeq) {
-        s12 = p.param.name + ":" + p.value + "," + s12
-
-      }
-      println(s12)
-      s12 = ""
-    }
-      println("=============================================================")*/
-
     return SelectedParamsMapIndexed
   }
 
@@ -956,6 +941,9 @@ object ClassifiersManager {
   val OrderList = List(0,6,1,2,3,4,5,7,8)
 
 
+  /**
+    * ranges for all Hyperparameters
+    */
   val numTrees    = Array(50,60,70)
   val maxDepth    = Array(6,7,8,9,10,11,13,15,17,19)
   val minInfoGain = Array(0.001, 0.01 , 0.1 )
@@ -971,16 +959,15 @@ object ClassifiersManager {
   val minInstancesPerNode= Array(1, 5, 10)
 
 
-
-
-
+  /**
+    * This function sort list of classifiers based on the Classifiers Order List
+  */
   def SortedSelectedClassifiers( lst:Array[Double]) : List[Int] =  {
     var rslt= List[Int]()
     for( i <- OrderList ) {
         if ( lst.contains(i))
           rslt = i :: rslt
       }
-
   return rslt.reverse
   }
 
