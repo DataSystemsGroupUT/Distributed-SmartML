@@ -1,10 +1,8 @@
 package org.apache.spark.ml.tuning
 
 
-
 import java.text.DecimalFormat
 import java.util.{Date, Locale, List => JList}
-
 import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
@@ -19,12 +17,11 @@ import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.util.ThreadUtils
 import org.dsmartml._
 import org.json4s.DefaultFormats
-
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.language.existentials
 import scala.collection.immutable.ListMap
-import scala.collection.mutable.ListBuffer
+
 
 /**
   * Parameters for [[Hyperband]] and [[HyperbandModel]].
@@ -166,6 +163,10 @@ trait HyperbandParams extends ValidatorParams {
 
 }
 
+
+/**
+  * Parameters for the optimization process result
+  */
 trait OptimizerResult
 {
   var bestParam :ParamMap = null
@@ -318,10 +319,7 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     * @return List of parameters for each sh iteration
     */
   def hyberband (dataset: Dataset[_]  ):ListMap[ParamMap, (Double,Model[_])] = {
-
-    //println("Number of partations:(hyberband) " + dataset.rdd.getNumPartitions)
-
-    // properities of hyperband
+ // properities of hyperband
     val eeta = $(eta)
     val max_Resource = $(maxResource)
     val shouldLogtoFile = $(logToFile)
@@ -428,45 +426,16 @@ class Hyperband (@Since("1.5.0") override val uid: String)
     val shouldLogtoFile = $(logToFile)
     val eeta:Double = $(eta)
 
-    /*
-
-    // select random n hyper parameters configuration
-    val rand = new util.Random()
-    rand.setSeed(1234 + s)
-    val end   = this.ClassifierParamsMapIndexed.toList.size
-    var ParamArray:Array[ParamMap] = new Array[ParamMap](n)
-    var iter = 0
-    var usedIndecies = List[Int]()
-    var SelectedParamsMapIndexed =  Map[Int,ParamMap]()
-
-    //in case of all the parameters less than the needed parametr by hyperband first sh
-    if( end <= n) {
-      SelectedParamsMapIndexed  = this.ClassifierParamsMapIndexed
-    }
-    else
-    {
-      while (iter < n) {
-        var x = rand.nextInt(end)
-        if (!usedIndecies.contains(x)) {
-          usedIndecies = x :: usedIndecies
-          SelectedParamsMapIndexed += (x -> this.ClassifierParamsMapIndexed(x))
-          iter = iter + 1
-        }
-      }
-    }
-
-*/
-
-    //println("===============================================================================")
     var SelectedParamsMapIndexed =  Map[Int,ParamMap]()
     SelectedParamsMapIndexed = ClassifiersMgr.getNRandomParameters( $(ClassifierName), n , s)//ClassifiersMgr.getRandomParametersIndexed( $(ClassifierName), n)
+
+    // for debuging convert ParamMap to string
     var s12 = ""
     for ( ps <- SelectedParamsMapIndexed) {
       for (p <- ps._2.toSeq) {
         s12 = p.param.name + ":" + p.value + "," + s12
 
       }
-      //println(s12)
       s12 = ""
     }
 
@@ -484,9 +453,6 @@ class Hyperband (@Since("1.5.0") override val uid: String)
         //Run each of the n_i configs for r_i iterations and keep best n_i/eta (loop)
         var n_i = n * math.pow(eeta, (-i))
         var r_i: Double = r * math.pow(eeta, (i))
-
-
-
         print("       -- Loop Number " + i + " , Train " + n_i + " Models on " + formatter.format(r_i) + "% of the data")
         filelog.logOutput("       -- Loop Number " + i + " , Train " + n_i + " Models on " + formatter.format(r_i) + "% of the data")
 
@@ -592,35 +558,9 @@ class Hyperband (@Since("1.5.0") override val uid: String)
      //Map to save the result
       var iterResultMap = collection.mutable.Map[Int, (Double,Model[_],ParamMap) ]()
 
-      /*
-      val ParamStep = $(parallelism)
-      var RemainingParamCount = 0
-      var curParamNumber = 0
-      var p = param
-      var Index = 0
-      RemainingParamCount = p.size
-      var parametercount = 0
 
-      while ( RemainingParamCount > 0 && !IsTimeOut() ) {
-
-        // check if there is enough parameters in the array
-        if (RemainingParamCount > ParamStep) {
-          parametercount = ParamStep
-          RemainingParamCount = RemainingParamCount - ParamStep
-        }
-        else {
-          parametercount = RemainingParamCount
-          RemainingParamCount = 0
-        }
-        var arr = new Array[ParamMap](ParamStep)
-        for( i <- 0 until  parametercount)
-        {
-          arr(i) = p.values.toList(i + Index)
-        }
-        Index = Index + parametercount
-*/
-        // Fit models in a Future for training in parallel
-        val metricFutures = param.map { case ( paramIndex , paramMap) =>
+       // Fit models in a Future for training in parallel
+       val metricFutures = param.map { case ( paramIndex , paramMap) =>
           Future[Double] {
             if (!IsTimeOut()) {
               //val paramIndex:Int = 1
@@ -700,7 +640,14 @@ class Hyperband (@Since("1.5.0") override val uid: String)
       }
   }
 
-
+  /**
+    * Split Data, this function can do splitting randomly.
+    * it has option that allow us to split data based taking classes ration into consideration
+    * @param dataset
+    * @param Percentage
+    * @param SplitbyClass
+    * @return
+    */
   def RandomSplitByClassValues(dataset: Dataset[_] , Percentage: Double , SplitbyClass:Boolean = false): Dataset[_] =  {
     var bdf: DataFrame = null
 
