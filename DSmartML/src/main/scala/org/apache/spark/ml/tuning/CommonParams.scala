@@ -3,6 +3,9 @@ package org.apache.spark.ml.tuning
 import org.apache.spark.ml.Model
 import org.apache.spark.ml.param._
 
+/**
+  * Optimizer Common Paramters
+  */
 trait CommonParams extends ValidatorParams{
 
   /**

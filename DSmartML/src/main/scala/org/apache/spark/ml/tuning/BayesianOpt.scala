@@ -2,7 +2,6 @@ package org.apache.spark.ml.tuning
 
 import java.text.DecimalFormat
 import java.util.{Date, Locale, List => JList}
-
 import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
@@ -20,11 +19,9 @@ import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.util.ThreadUtils
 import org.dsmartml._
 import org.json4s.DefaultFormats
-
 import scala.collection.JavaConverters._
 import scala.concurrent.Future
 import scala.language.existentials
-import scala.collection.immutable.ListMap
 import scala.collection.mutable.ListBuffer
 import scala.util.control.Breaks.{break, breakable}
 
